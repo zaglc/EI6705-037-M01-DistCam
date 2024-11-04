@@ -1,0 +1,47 @@
+{
+    "cam_num": 6,
+    "login": [
+        {
+            "NAME": "admin",
+            "PASSWD": "1234",
+            "IP": "192.168.31.208",
+            "PORT": "8554",
+            "CHANNEL": "1"
+        },
+        {
+            "NAME": "admin",
+            "PASSWD": "xxx",
+            "IP": "xxx",
+            "PORT": "8000",
+            "CHANNEL": "1"
+        },
+        {
+            "NAME": "admin",
+            "PASSWD": "xxx",
+            "IP": "xxx",
+            "PORT": "8000",
+            "CHANNEL": "1"
+        },
+        {
+            "NAME": "admin",
+            "PASSWD": "xxx",
+            "IP": "xxx",
+            "PORT": "8000",
+            "CHANNEL": "1"
+        },
+        {
+            "NAME": "admin",
+            "PASSWD": "xxx",
+            "IP": "192.168.89.205",
+            "PORT": "8000",
+            "CHANNEL": "101"
+        },
+        {
+            "NAME": "admin",
+            "PASSWD": "xxx",
+            "IP": "192.168.89.206",
+            "PORT": "8000",
+            "CHANNEL": "101"
+        }
+    ]
+}
