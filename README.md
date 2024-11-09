@@ -23,4 +23,4 @@
 
 ### PREVIEW 
 + v2: ![local](preview/v2.png) 
-+ v3: ![local](preview/v3.png) 
++ v3: ![local](preview/v3.PNG) 
