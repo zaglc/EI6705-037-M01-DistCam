@@ -1,23 +1,22 @@
-from PyQt6 import QtCore, QtGui, QtWidgets
-from PyQt6.QtWidgets import QPushButton
-from typing import List
+from PyQt6.QtWidgets import QPushButton, QWidget
+from PyQt6.QtGui import QFont, QIcon
 
 
 class ctrl_btn(QPushButton):
+    """
+    ctrl_btn in ctrl_panel
+    """
+
     def __init__(self,
-                 parent: QtWidgets.QWidget,
+                 parent: QWidget,
                  icon: str,
-                 name: str,
-                 pos: tuple,
                  cmd: int,
-    ):
+                 text: str | None = None,
+    ) -> None:
         super().__init__(parent=parent)
-        self.setGeometry(QtCore.QRect(*pos))
-        font = QtGui.QFont()
+        font = QFont()
         font.setPointSize(9)
         self.setFont(font)
-        self.setText("")
-        self.setIcon(QtGui.QIcon(icon))
-        self.setObjectName(name)
-        self.command = cmd
-
+        self.setText(text if text is not None else "")
+        self.setIcon(QIcon(icon))
+        self.command = cmd if cmd > 0 else None

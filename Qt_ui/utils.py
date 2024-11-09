@@ -1,3 +1,6 @@
+from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtWidgets import QApplication
+
 
 def generate_pos(size: tuple, num_cam: int):
     max_num = 6
@@ -12,3 +15,17 @@ def generate_pos(size: tuple, num_cam: int):
             width
         )
         index += 1
+
+
+class Stream(QObject):
+    """
+    Adopt from https://blog.csdn.net/quay_sue/article/details/133841837
+    """
+
+    newText_signal = pyqtSignal(str)
+
+    def write(self, text: str):
+        self.newText_signal.emit(text)
+        QApplication.processEvents()
+
+gpc_stream = Stream()

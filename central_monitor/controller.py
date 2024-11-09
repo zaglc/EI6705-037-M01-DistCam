@@ -1,22 +1,42 @@
-from central_monitor.HCNetSDK import *
 from typing import Tuple
 from ctypes import create_string_buffer as csb, cdll, CDLL
 
+from central_monitor.HCNetSDK import (
+    NET_DVR_PREVIEWINFO,
+    NET_DVR_DEVICEINFO_V30,
+    byref,
+)
+
+
 class Controller():
-    def __init__(self, login_config) -> None:
+    def __init__(self, login_config: dict) -> None:
         self.login_flag = True
         # self._init_dll()
         # self._login(login_config)
         self.HCsdk : CDLL
 
 
-    def _init_dll(self):
+    def _init_dll(self) -> None:
+        """
+        initialize necessary library
+        
+        current lib list:[
+            "linux-lib/libhcnetsdk.so",
+        ]
+        """
+
         if self.login_flag:
             self.HCsdk = cdll.LoadLibrary("linux-lib/libhcnetsdk.so")
-        self.HCsdk.NET_DVR_Init()
+            self.HCsdk.NET_DVR_Init()
 
-    def _login(self, login_config):
+
+    def _login(self, login_config: dict) -> None:
+        """
+        login specifially device according to imformation in configs
+        """
+
         if self.login_flag:
+            # usr name and passwd etc.
             dev_ip = csb(login_config["IP"].encode())
             dev_port = int(login_config["PORT"])
             dev_user_name = csb(login_config["NAME"].encode())
@@ -38,13 +58,20 @@ class Controller():
             preview_info.dwLinkMode = 0
             preview_info.bBlocked = 1
 
+            # TODO: here the HCNetSDK offers REALDATACALLBACK
+            # it acts like "hook", which will automatically invoked after the camera has obtained some data packets
+            # the transmission deley through these API with C++ backend might be faster then implementing by cv2 with python backend
             self.lReadPlayHandle = self.HCsdk.NET_DVR_RealPlay_V40(lUserId, byref(preview_info), None, None)
 
 
-    def handle_ctrl(self, op: Tuple[int]):
+    def handle_ctrl(self, op: Tuple[int]) -> None:
+        """
+        now the func can only execute basic PTZ ctrl commands
+        argument "op" must be a tuple of int
+        where the first elm represents command and the other means start or stop
+        """
+
         if self.login_flag:
             ret = self.HCsdk.NET_DVR_PTZControl(self.lReadPlayHandle, op[0], op[1])
             if ret == 0:
                 print(("Start " if op[1] == 0 else "Stop ")+f"ptz control fail, error code is: {self.HCsdk.NET_DVR_GetLastError()}")
-            else:
-                print(("Start " if op[1] ==0 else "Stop ")+"ptz control success")
