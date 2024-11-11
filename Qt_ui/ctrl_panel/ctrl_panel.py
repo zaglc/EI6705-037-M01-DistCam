@@ -1,10 +1,9 @@
-import os, sys
+import os, datetime
 from PyQt6.QtWidgets import (
     QPushButton, QVBoxLayout, QGridLayout, QGroupBox, QFileDialog, 
-    QTextBrowser, QLabel, QWidget, QMainWindow, QToolBar, QApplication
+    QTextBrowser, QLabel, QWidget, QMainWindow, QToolBar
 )
-from PyQt6.QtCore import pyqtSignal, QObject
-from PyQt6.QtGui import QTextCursor
+from PyQt6.QtCore import pyqtSignal
 from typing import Dict
 from functools import partial
 from multiprocessing.connection import Connection
@@ -18,7 +17,7 @@ from central_monitor.HCNetSDK import (
     IRIS_OPEN, IRIS_CLOSE,
 )
 from Qt_ui.ctrl_panel.ctrl_button import ctrl_btn
-from Qt_ui.utils import gpc_stream
+
 
 class ctrl_panel(QToolBar):
     """
@@ -26,10 +25,10 @@ class ctrl_panel(QToolBar):
     """
 
     # signal to be triggered when pushing CAPTURE btn
-    camera_btn_signal = pyqtSignal(str)
+    camera_btn_signal = pyqtSignal()
 
     # singal to be triggered when pushing RECORD btn
-    record_btn_signal = pyqtSignal(tuple)
+    record_btn_signal = pyqtSignal(int)
 
     def __init__(
             self, 
@@ -41,7 +40,7 @@ class ctrl_panel(QToolBar):
         ) -> None:
         """
         Args:
-            parent: minwin.centralwidgt
+            parent: main window
             num_cam: total camera number
             conn: one end of Pipe, transmiting command tuple
             cond: condition of multiprocessing, let the process sleep
@@ -80,7 +79,6 @@ class ctrl_panel(QToolBar):
             IRIS_OPEN: (2, 5, 1, 1),
         }
 
-
     def init_PTZ_btns(self, parent: QWidget):
         """
         initialize control button zone
@@ -107,10 +105,9 @@ class ctrl_panel(QToolBar):
         groupbox.setStyleSheet("QGroupBox{font:30;}")
         grid2 = QVBoxLayout()
         grid2.addWidget(groupbox)
-        grid2.addStretch(1)
 
         self.outer = QWidget(self)
-        self.outer.setMinimumSize(150, 750)
+        self.outer.setMinimumSize(150, 300)
         self.outer.setLayout(grid2)
         self.addWidget(self.outer)
 
@@ -120,42 +117,28 @@ class ctrl_panel(QToolBar):
         initialize record/capture zone
         """
 
-        self.camera_btn = ctrl_btn(parent, f"Qt_ui/ctrl_panel/icon/icon_CAPTURE.png", -1, "CAPTURE")
+        self.camera_btn = ctrl_btn(
+            parent, f"Qt_ui/ctrl_panel/icon/icon_CAPTURE.png", 
+            -1, "CAPTURE"
+        )
         self.camera_btn.clicked.connect(self.camera_btn_slot)
-        self.record_btn = ctrl_btn(parent, f"Qt_ui/ctrl_panel/icon/icon_RECORD.png", -1, "RECORD")
+        self.record_btn = ctrl_btn(
+            parent, f"Qt_ui/ctrl_panel/icon/icon_RECORD.png", 
+            -1, "RECORD"
+        )
         self.record_btn.clicked.connect(self.record_btn_slot)
-        self.path_browser_lab = QLabel(parent)
-        self.path_browser_lab.setText("Current Active Path")
-        self.path_browser_lab.setStyleSheet("QLabel{font:20}")
-        self.path_browser = QTextBrowser(parent)
-        self.path_browser.setFixedHeight(int(self.path_browser.document().size().height())+5)
-        
-        self.select_pth_btn = ctrl_btn(parent, f"Qt_ui/ctrl_panel/icon/icon_PTZ_21.png", -1, "SEL_PATH")
-        self.select_pth_btn.clicked.connect(self.select_path_btn_slot)
-        self.camera_btn_defalut_path = os.getcwd()
-
-        self.output_text = QTextBrowser(parent)
-        self.output_text_lab = QLabel(parent)
-        self.output_text_lab.setText("Output")
-        sys.stdout = gpc_stream
-        sys.stdout.newText_signal.connect(self.redirect_stdout_slot)
 
         grid = QGridLayout()
         grid.setSpacing(5)
-        grid.addWidget(self.path_browser_lab, 0, 0, 1, 1)
-        grid.addWidget(self.path_browser, 1, 0, 1, 1)
-        grid.addWidget(self.select_pth_btn ,2, 0, 1, 1)
-        grid.addWidget(self.camera_btn, 3, 0, 1, 1)
-        grid.addWidget(self.record_btn, 4, 0, 1, 1)
-        grid.addWidget(self.output_text_lab, 5, 0, 1, 1)
-        grid.addWidget(self.output_text, 6, 0, 1, 1)
-        groupbox = QGroupBox("CAMERA", parent=parent)
+        grid.addWidget(self.camera_btn, 0, 0, 1, 1)
+        grid.addWidget(self.record_btn, 1, 0, 1, 1)
+        groupbox = QGroupBox("DATA-SAVING", parent=parent)
         groupbox.setStyleSheet("QGroupBox{font:30;}")
         groupbox.setLayout(grid)
 
         grid2 = self.outer.layout()
         grid2.addWidget(groupbox)
-        grid2.addStretch(3)
+        grid2.addStretch(1)
         self.outer.setLayout(grid2)
 
 
@@ -182,24 +165,12 @@ class ctrl_panel(QToolBar):
             self.if_pressed = True
 
 
-    def select_path_btn_slot(self):
-        """
-        slot func invoke after pushing SEL_PATH button
-        """
-
-        folder = QFileDialog.getExistingDirectory(self, 'Choose folder to save', directory=self.camera_btn_defalut_path)
-        if folder:
-            self.path_browser.setText(folder)
-            self.path_browser.setFixedHeight(int(self.path_browser.document().size().height())+5)
-            self.camera_btn_defalut_path = folder
-
-
     def camera_btn_slot(self):   
         """
         slot func invoke after pushing CAPTURE button
         """
 
-        self.camera_btn_signal.emit(self.camera_btn_defalut_path)
+        self.camera_btn_signal.emit()
 
 
     def record_btn_slot(self):
@@ -208,9 +179,9 @@ class ctrl_panel(QToolBar):
         """
 
         if not self.is_recording:
-            self.record_btn_signal.emit((self.camera_btn_defalut_path, 1))
+            self.record_btn_signal.emit(1)
         else:
-            self.record_btn_signal.emit(("", 0))
+            self.record_btn_signal.emit(0)
 
 
     def setupUi(self, MainWindow: QMainWindow):
@@ -222,13 +193,9 @@ class ctrl_panel(QToolBar):
         self.init_frame_btn(self)
 
 
-    def set_selected_cam(self, val: int):
-        self.selected_cam = val
+    def set_selected_cam(self, cam_id: int):
+        """
+        set camera selected for ctrl-buttons
+        """
 
-
-    def redirect_stdout_slot(self, text: str):
-        cursor = self.output_text.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        cursor.insertText(text)
-        self.output_text.setTextCursor(cursor)
-        self.output_text.ensureCursorVisible()
+        self.selected_cam = cam_id
