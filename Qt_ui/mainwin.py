@@ -35,7 +35,7 @@ class custom_window(QMainWindow):
         self.setCentralWidget(ctw)
         self.num_cam = gpc["num_cam"]
         self.switch_btn_label = False
-        self.curtime = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
+        self.curtime = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
         # initializing view panel
         self.dis = dis_win(
@@ -94,7 +94,7 @@ class custom_window(QMainWindow):
 
         # intitializing menubar
         self._init_meunbar()
-        self.terminal_panel.redirect_stdout_slot("")
+        # self.terminal_panel.redirect_stdout_slot("")
 
 
     def _init_meunbar(self):
@@ -330,7 +330,7 @@ class custom_window(QMainWindow):
         if img_lst[0] is None and os.path.exists("data/temp/box_config.json"):
             with open("data/temp/box_config.json", 'r') as f:
                 dicts = json.load(f)
-                dicts["select_path"] = os.getcwd()+f"/data/{self.curtime}"
+                dicts["select_path"] = os.path.join("data", self.curtime)
             with open("data/temp/box_config.json", 'w') as f:
                 json.dump(dicts, f)
             return

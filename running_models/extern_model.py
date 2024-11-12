@@ -16,7 +16,7 @@ def initialize_model(
         type: str = "yolov3", 
         weights: str = "./running_models/yolov3/weights/110-0.447.pt",
         # data_class: str = "./running_models/yolov3/data/coco.names",
-        data_class: str = "/home/lenovo/xzh/zhenda_data/1/names.txt",
+        data_class: str = "./configs/names.txt",
         seedid: int = 1024,
     ) -> list: 
     assert type in ["yolov3"]

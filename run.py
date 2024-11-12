@@ -45,8 +45,8 @@ def model_Main(
     process for model inference
     """
     
-    sys.stdout = stream
-    stream._add_item(os.getpid(), f"MODEL {ddp_id}")
+    # sys.stdout = stream
+    # stream._add_item(os.getpid(), f"MODEL {ddp_id}")
     inference_fg2.acquire(True)
 
     # model loading and cuda memory pre-allocating
@@ -135,8 +135,8 @@ def frame_Main(
     """
 
     # start thread which continously reading videocapture
-    sys.stdout = stream
-    stream._add_item(os.getpid(), F"FRAME {camera.id}")
+    # sys.stdout = stream
+    # stream._add_item(os.getpid(), F"FRAME {camera.id}")
 
     out_pipeObj, in_pipeObj = frame_pipeObj
     out_pipeObj.close()
@@ -251,8 +251,8 @@ def ctrl_Main(
     ctrl process sending PTZ ctrl cmds
     """
 
-    sys.stdout = stream
-    stream._add_item(os.getpid(), "CTRL 0")
+    # sys.stdout = stream
+    # stream._add_item(os.getpid(), "CTRL 0")
 
     out_pipeObj, in_pipeObj = ctrl_pipeObj
     in_pipeObj.close()

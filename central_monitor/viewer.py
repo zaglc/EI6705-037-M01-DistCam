@@ -29,8 +29,8 @@ class Viewer():
                 chan["PORT"],
                 chan["CHANNEL"], 
             )
-            url = f"rtsp://{name}:{passwd}@{ip}:{port}/live"
-            # url = f"rtsp://{name}:{passwd}@{ip}/Streaming/Channels/{channel}"
+            # url = f"rtsp://{name}:{passwd}@{ip}:{port}/live"
+            url = f"rtsp://{name}:{passwd}@{ip}/Streaming/Channels/{channel}"
             self._url.append(url)
 
         # here if there is more than 1 channels included in config for 1 cam
@@ -314,7 +314,7 @@ class Viewer():
         """
 
         tp = "RGB" if chan_id == 0 else "THER"
-        folder = self.capture_path+f"/{self.id}_{tp}/{type}"
+        folder = os.path.join(self.capture_path, os.path.join(str(self.id)+ "_" + tp, type))
         if not os.path.exists(folder):
             os.makedirs(folder)
         
@@ -322,7 +322,7 @@ class Viewer():
         pfx = f"{tp[0]}{self.id}_{self.obj_id[chan_id]}_"
         files = [f.startswith(pfx) for f in os.listdir(f"{folder}")]
         num = "0"*(4-len(str(sum(files)+1)))+str(sum(files)+1)
-        cur = datetime.datetime.now().strftime('%m-%d_%H:%M:%S')
-        pth = f"{folder}/{pfx}{num}_{cur}{sfx}"
+        cur = datetime.datetime.now().strftime('%m-%d_%H-%M-%S')
+        pth = os.path.join(folder, pfx+num+"_"+cur+sfx)
 
         return pth
