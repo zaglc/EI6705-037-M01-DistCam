@@ -1,19 +1,26 @@
-from multiprocessing import Array, Value
-from multiprocessing.synchronize import Condition
-from multiprocessing.sharedctypes import SynchronizedBase, SynchronizedArray
+from multiprocessing import Queue
 import cv2, numpy as np, os, datetime
 
 # suffix 'Q' means cmd set by QThread
 # otherwise by frame main
-FV_QTHREAD_READY_Q = 0
-FV_FRAME_PROC_READY_F = 1
-FV_SWITCH_CHANNEL_Q = 2
-FV_PKGLOSS_OCCUR_F = 3
-FV_CAPTURE_IMAGE_Q = 4
-FV_RECORD_VIDEO_Q = 5
-FV_FLIP_SIMU_STREAM_Q = 6
-FV_FLIP_MODEL_ENABLE_Q = 7
+FV_QTHREAD_READY_Q = 2
+FV_FRAME_PROC_READY_F = 3
+FV_SWITCH_CHANNEL_Q = 4
+FV_PKGLOSS_OCCUR_F = 5
+FV_CAPTURE_IMAGE_Q = 6
+FV_RECORD_VIDEO_Q = 7
+FV_FLIP_SIMU_STREAM_Q = 8
+FV_FLIP_MODEL_ENABLE_Q = 9
+FV_PTZ_CTRL_Q = 10
 FV_QTHREAD_PAUSE_Q = 16
+
+RS_STOP = 0
+RS_WAITING = 1
+RS_RUNNING = 2
+
+FV_STOP = 0
+FV_RUNNING = 2
+
 
 def generate_pos(size: tuple, num_cam: int):
     max_num = 6
@@ -42,7 +49,7 @@ def pad_with_fixed_ratio(img: np.ndarray, width: int, height: int, id: int):
     return img_new, img_new.shape[1], img_new.shape[0]
 
 # TODO: useful if we need to arbitrarily pause frame window
-def sync_processes(cond: Condition, cnt: SynchronizedBase, total: int):
+def sync_processes(cond, cnt, total: int):
     with cnt.get_lock():
         cnt.value += 1
         tmp = cnt.value
@@ -56,7 +63,7 @@ def sync_processes(cond: Condition, cnt: SynchronizedBase, total: int):
             cond.notify_all()
 
 
-def count_nonactive_proc(shape_cnt: SynchronizedArray, local_size: int):
+def count_nonactive_proc(shape_cnt, local_size: int):
     return local_size - sum([shape_cnt[4*i+3] for i in range(local_size)])
 
 
@@ -70,8 +77,8 @@ class Stream():
     """
 
     def __init__(self) -> None:
-        self.log_buffer = Array('c', 8192)
-        self.offset = Value('i', 0)
+
+        self.log_buffer = Queue()
         self.proc_table = dict()
 
 
@@ -85,15 +92,16 @@ class Stream():
 
         # python `print` will invoke this method causing `end` is not None
         if len(text) > 2:
-            new_text = f"[{name} at {curtime}]: " + text
+            new_text = f"[{name} at {curtime}]: " + text + "\n"
         else:
             new_text = text
 
-        with self.log_buffer.get_lock():
-            with self.offset.get_lock():
-                size, ofs = len(new_text), self.offset.value
-                self.log_buffer[ofs: size+ofs] = new_text.encode()
-                self.offset.value += size
+        self.log_buffer.put(new_text)
+
+
+    def flush(self) -> None:
+        # TODO: if needed
+        pass
 
 
     def _add_item(self, pid: int, name: str):

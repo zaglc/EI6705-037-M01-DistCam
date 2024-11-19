@@ -13,6 +13,9 @@ from Qt_ui.data_panel.data_table import Realtime_Datatab
 from Qt_ui.terminal_panel.output_log import terminal
 from Qt_ui.childwins.save_prefer import childWindow
 
+from Qt_ui.utils import (
+    RS_WAITING, RS_RUNNING, RS_STOP
+)
 
 class custom_window(QMainWindow):
     """
@@ -33,24 +36,35 @@ class custom_window(QMainWindow):
         self.setWindowTitle("Monitor")
         ctw = QWidget(self)
         self.setCentralWidget(ctw)
+        self.model_status = RS_WAITING
         self.num_cam = gpc["num_cam"]
-        self.switch_btn_label = False
+        
+        # only for start and stop model process
+        self.data_queues = gpc["data_queues"]
+        # final image to be shown in view panel
+        self.frame_write_queues = gpc["frame_write_queues"]
+        # video command and ctrl command, maintained by custom_window
+        self.command_queues = gpc["command_queues"]
+        
+        self.pool = gpc["pool"]
+        self.streaming = False
         self.curtime = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+
+        # initializing other content
+        self.resolution: List[list] = []
+        for queue in self.frame_write_queues:
+            self.resolution.append(queue.get())
 
         # initializing view panel
         self.dis = dis_win(
             parent=self, 
             num_cam=self.num_cam,
-            frame_pa_conn=gpc["frame_pa_conn"],
-            frame_flag=gpc["frame_flag"],
-            frame_val4exec_seq=gpc["frame_val4exec_seq"],
-            num_channel=gpc["num_channel"],
-            frame_buffer=gpc["frame_buffer"],
+            frame_queues=self.frame_write_queues,
+            command_queues=self.command_queues,
         )
         for win in self.dis.videoWin:
             win.ctrl_select_btn_signal.connect(self.ctrl_select_btn_slot)
             win.frame_thread.camera_capture_recover_signal.connect(self.camera_cap2rec_btn_recover_slot)
-            win.frame_thread.camera_record_recover_signal.connect(self.camera_cap2rec_btn_recover_slot)
         self.scroll_area = QScrollArea(ctw)
         self.scroll_area.setWidget(self.dis)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -58,14 +72,12 @@ class custom_window(QMainWindow):
         # initializing ctrl panel
         self.ctrl_panel = ctrl_panel(
             parent=self, 
-            num_cam=gpc["num_cam"],
-            conn=gpc["ctrl_pa_conn"],
-            cond=gpc["ctrl_flag"],
-            exec_seq=gpc["ctrl_val4exec_seq"],
+            num_cam=self.num_cam,
         )
         self.ctrl_panel.setupUi(self)
         self.ctrl_panel.camera_btn_signal.connect(self.camera_capture_btn_slot)
         self.ctrl_panel.record_btn_signal.connect(self.camera_record_btn_slot)
+        self.ctrl_panel.ptz_btn_signal.connect(self.camera_ctrl_signal_slot)
         self.addToolBar(Qt.ToolBarArea.RightToolBarArea, self.ctrl_panel)
 
         # initializing data panel
@@ -76,15 +88,6 @@ class custom_window(QMainWindow):
 
         self.terminal_panel = terminal(self.centralWidget())
         self.addToolBar(Qt.ToolBarArea.BottomToolBarArea, self.terminal_panel)
-
-        # initializing global context
-        # TODO: need optimize
-        self.run_flag = gpc["run_flag"]
-        self.pool = gpc["pool"]
-        self.conds = [*gpc["inference_fg2"], *gpc["frame_flag"], gpc["ctrl_flag"]]
-        self.other_conds = [*gpc["inference_fg"]]
-        self.resolution: List[list] = gpc["resolution"]
-        self.proc_num = [len(self.pool)-1-self.num_cam, len(self.pool)-1]
 
         # 修改grid，以后还要改
         ctw = self.centralWidget()
@@ -178,16 +181,12 @@ class custom_window(QMainWindow):
         slot function for start/stop displaying
         """
 
-        if self.switch_btn_label:
-            for win in self.dis.videoWin:
-                win.response_main_click_slot()
-            self.start_stop_action.setText("Start")
-            self.switch_btn_label = False
-        else:
-            for win in self.dis.videoWin:
-                win.response_main_click_slot()
-            self.start_stop_action.setText("Stop")
-            self.switch_btn_label = True
+        for win in self.dis.videoWin:
+            win.frame_thread.switch_cam_lock.lock()
+            win.frame_thread.pause_flag = True
+            win.frame_thread.switch_cam_lock.unlock()
+        self.start_stop_action.setText("Start" if self.streaming else "Stop")
+        self.streaming = not self.streaming
 
 
     def ctrl_select_btn_slot(self, info: tuple):
@@ -217,6 +216,17 @@ class custom_window(QMainWindow):
         self.data_panel._compute_slide_exp_average((interval, drop), id)
         if display_flag:
             self.data_panel._updateTabItem(id)
+
+
+    def camera_ctrl_signal_slot(self, cam_num: int, cmd: int, on_off: int):
+        """
+        slot function for camera control signal
+        """
+
+        win = self.dis.videoWin[cam_num]
+        win.frame_thread.switch_cam_lock.lock()
+        win.frame_thread.ctrl_info = (cmd, on_off)
+        win.frame_thread.switch_cam_lock.unlock()
 
 
     def camera_capture_btn_slot(self):
@@ -265,29 +275,30 @@ class custom_window(QMainWindow):
             self.ctrl_panel.is_recording = False
 
 
-    def camera_record_btn_slot(self, info: int):
+    def camera_record_btn_slot(self):
         """
         slot function for record button
         """
 
-        is_start = info
         if all([not win.is_selected_cap for win in self.dis.videoWin]): 
             return
 
-        self.ctrl_panel.is_recording = True
-        self.ctrl_panel.camera_btn.setEnabled(False)
-        self.ctrl_panel.camera_btn.setStyleSheet("ctrl_btn{color:rgb(127,127,127)}")
-        self.ctrl_panel.record_btn.setStyleSheet("ctrl_btn{color:rgb(255,0,0)}")
-        
-        for _, win in enumerate(self.dis.videoWin):
-            win.capture_btn.setEnabled(False)
-            style = win.capture_btn.styleSheet().replace("0","127")
-            win.capture_btn.setStyleSheet(style)
+        if not self.ctrl_panel.is_recording:
+            self.ctrl_panel.is_recording = True
+            self.ctrl_panel.camera_btn.setEnabled(False)
+            self.ctrl_panel.camera_btn.setStyleSheet("ctrl_btn{color:rgb(127,127,127)}")
+            self.ctrl_panel.record_btn.setStyleSheet("ctrl_btn{color:rgb(255,0,0)}")
+            for _, win in enumerate(self.dis.videoWin):
+                win.capture_btn.setEnabled(False)
+                style = win.capture_btn.styleSheet().replace("0","127")
+                win.capture_btn.setStyleSheet(style)
+        else:
+            self.camera_cap2rec_btn_recover_slot()
 
         for _, win in enumerate(self.dis.videoWin):
             if not win.is_selected_cap: continue
             win.frame_thread.switch_cam_lock.lock()
-            win.frame_thread.record_active = 1 if is_start else 0
+            win.frame_thread.record_active = 1
             win.frame_thread.switch_cam_lock.unlock()
 
 
@@ -310,6 +321,9 @@ class custom_window(QMainWindow):
         which indicating whether model inference should be activated or not
         """
 
+        self.model_status = RS_RUNNING if self.model_status == RS_WAITING else RS_RUNNING
+        for queue in self.data_queues:
+            queue.put((0, self.model_status, None))
         for win in self.dis.videoWin:
             win.switch_cam_lock.lock()
             win.frame_thread.model_flag = True
@@ -332,7 +346,7 @@ class custom_window(QMainWindow):
                 dicts = json.load(f)
                 dicts["select_path"] = os.path.join("data", self.curtime)
             with open("data/temp/box_config.json", 'w') as f:
-                json.dump(dicts, f)
+                json.dump(dicts, f, indent=4)
             return
 
         chan_ids = [bag.index(img_lst[i][1]) for i, bag in enumerate(self.resolution)]
@@ -349,7 +363,7 @@ class custom_window(QMainWindow):
                 old_dicts = json.load(f)
             with open("data/temp/box_config.json", 'w') as f:
                 old_dicts.update(dicts)
-                json.dump(old_dicts, f)
+                json.dump(old_dicts, f, indent=4)
         dialog.destroy()
 
 
@@ -372,23 +386,22 @@ class custom_window(QMainWindow):
             3. stop main process
         """
 
-        with self.run_flag.get_lock():
-            self.run_flag.value = 0
         for idx, win in enumerate(self.dis.videoWin):
-            win.frame_thread.quit()
+            win.frame_thread.is_running = False
             print(f"frame Qthread {idx} quit")
+        self.terminal_panel.std_thread.is_running = False
+
+        # pass quit flag to sub-processes
+        for queue in self.data_queues:
+            queue.put((0, RS_STOP, None))
+        for queue in self.command_queues:
+            queue.put((RS_STOP, None, None))
 
         for idx, child in enumerate(self.pool):
-            if idx >= self.proc_num[0] and idx < self.proc_num[1]:
-                m_id = (idx-self.proc_num[0])//(self.num_cam//self.proc_num[0])
-                with self.other_conds[m_id]:
-                    self.other_conds[m_id].notify_all()
-            with self.conds[idx]:
-                self.conds[idx].notify_all()
             child.join()
             print(f"subprocess {idx} quit, pid is {child.pid}")
         
-        self.terminal_panel.std_thread.quit()
-        sys.stdout = sys.__stdout__
+        self.terminal_panel.std_thread.is_running = False
         print("Std Qthread quit")
+        sys.stdout = sys.__stdout__
         super().closeEvent(event)

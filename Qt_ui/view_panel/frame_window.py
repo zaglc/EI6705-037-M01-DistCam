@@ -3,8 +3,10 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal, Qt, QMutex
 from PyQt6.QtGui import QPixmap, QImage
-from multiprocessing.sharedctypes import SynchronizedArray
+from multiprocessing import Queue
+from queue import Queue as TQueue
 import numpy as np, ctypes
+import time
 
 from Qt_ui.threads import QThread4VideoDisplay
 
@@ -18,10 +20,10 @@ class frame_win(QWidget):
     def __init__(self,
                  id: int,
                  parent: QWidget,
-                 chan_num: int,
-                 frame_buffer: SynchronizedArray,
-                 thread_param: list,
+                 frame_queue: Queue,
+                 command_queue: Queue,
                  min_size: tuple, 
+                 chan_num: int = 1,
     ):
         """
         Args:
@@ -43,11 +45,13 @@ class frame_win(QWidget):
         }
 
         self.id = id
-        self.frame_buffer = frame_buffer
+        self.frame_queue = frame_queue
+        self.command_queue = command_queue
+
         self.is_selected_cap = False
         self.is_selected_ctrl = False
-        self.streaming = False
         self.switching = False
+        self._loc_frame_queue = TQueue()
         
         # save preview fig
         self._lock = QMutex()
@@ -97,9 +101,11 @@ class frame_win(QWidget):
         grid2.addWidget(self.groupbox, 0, 0)
         self.setLayout(grid2)
 
-        self.frame_thread = QThread4VideoDisplay(*thread_param)
+        self.frame_thread = QThread4VideoDisplay(self.id, self.frame_queue, self.command_queue, self._loc_frame_queue)
+        self.frame_thread.send_signal.connect(self.switch_frame_slot)
         self.frame_thread.switch_btn_recover_signal.connect(self.recover_switch_cam_slot)
         self.switch_cam_lock = self.frame_thread.switch_cam_lock
+        self.frame_thread.start()
 
 
     def selected_cap_slot(self):
@@ -147,18 +153,27 @@ class frame_win(QWidget):
         self.switch_cam_lock.unlock()
 
 
-    def switch_frame_slot(self, shape):
+    def switch_frame_slot(self, frame_config):
         """
         slot function for thread Qsingal to change displaying image
         """
         
-        with self.frame_buffer.get_lock():
-            pics = np.frombuffer(self.frame_buffer.get_obj(), dtype=ctypes.c_uint8)
-            nbytes = shape[0] * shape[1] * shape[2]
-            img = pics[:nbytes].reshape(shape)
+        frame: np.ndarray = self._loc_frame_queue.get()
+        if len(frame.shape) < 3:
+            return
+
+        # TODO: 替换为yolo util
+        shape = frame.shape
+        box, bright = frame_config
+        x1 = round((box[0] - box[2]/2) * shape[1])
+        y1 = round((box[1] - box[3]/2) * shape[0])
+        x2 = round((box[0] + box[2]/2) * shape[1])
+        y2 = round((box[1] + box[3]/2) * shape[0])
+        frame = frame[y1: y2, x1: x2, :].copy()
+        # frame = np.clip((frame[y1: y2, x1: x2, :].astype(np.float32))*bright, 0, 255).astype(np.uint8)
         
-        w, h = shape[1], shape[0]
-        image = QImage(img, w, h, QImage.Format.Format_BGR888)
+        w, h = x2 - x1, y2 - y1
+        image = QImage(frame, w, h, QImage.Format.Format_BGR888)
         self.frame.setPixmap(QPixmap.fromImage(image))
 
         if self.save_freq[0] == 0:
@@ -200,18 +215,3 @@ class frame_win(QWidget):
         w = int(self.frame.height() * 1.8)
         self.frame.setFixedWidth(w)
         super().resizeEvent(event)
-
-
-    # TODO: may be deleted
-    def response_main_click_slot(self):
-        """
-        slot for responsing main window about start/stop displaying
-        """
-
-        if not self.streaming:
-            self.frame_thread.send_signal.connect(self.switch_frame_slot)
-            self.frame_thread.start()
-            self.streaming = True
-        else:
-            self.frame_thread.send_signal.disconnect(self.switch_frame_slot)
-            self.streaming = False

@@ -9,6 +9,7 @@ from running_models.yolov3_utils import (
     scale_coords, plot_one_box,
 )
 
+IMG_SIZE = 512
 
 # TODO: so many todo...
 def initialize_model(
@@ -27,7 +28,7 @@ def initialize_model(
 
     if type == "yolov3":
         cfg = "./running_models/yolov3/cfg/yolov3-t.cfg"
-        img_size = 512
+        img_size = IMG_SIZE
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
         model = Darknet(cfg, img_size)
@@ -37,34 +38,31 @@ def initialize_model(
         chunk_tsr = torch.zeros((local_num_cam, 3, int(img_size*9/16), img_size)).float().to(device)
         model(chunk_tsr, augment=False)
 
-    return [model, img_size, device, classes, colors, chunk_tsr]
+    return [model, device, classes, colors]
 
 
-def preprocess_img(chunk_tsr: torch.Tensor, ori_imgs: List[np.ndarray], img_size: int, device: str, active_id: int):
+def preprocess_img(ori_img: np.ndarray, img_size: int = IMG_SIZE, device: str = "cuda:0"):
     # print(ori_img.dtype)
-    imgs = [letterbox(img, new_shape=(img_size, int(img_size*9/16))) for img in ori_imgs]
-    imgs = np.stack(imgs, 0)
-    imgs = imgs[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB, to bsx3x416x416
-    imgs = np.ascontiguousarray(imgs)
+    img = letterbox(ori_img.copy(), new_shape=(img_size, int(img_size*9/16)))
+    img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to bsx3x416x416
+    img = np.ascontiguousarray(img)
 
-    imgs = torch.from_numpy(imgs).to(device)
-    imgs = imgs.float()/255.0
+    img = torch.from_numpy(img).to(device)
+    img = img.float()/255.0
 
-    chunk_tsr.data[:active_id] = imgs.data
+    return img
 
 
-def process_result(ori_imgs: List[np.ndarray], img_size: int, results, classes, colors):
-    # apply NMS
-    results = non_max_suppression(results, conf_thres=0.3, multi_label=False)
-    inf_shape = (int(img_size*9/16), img_size)
+def process_result(ori_img: np.ndarray, det, classes, colors):
+    inf_shape = (int(IMG_SIZE*9/16), IMG_SIZE)
 
-    # process detections
-    for i, det in enumerate(results):
-        
-        if det is not None and len(det):
-            # if i == 0: print(f"DETECT: total {len(det)} boxes")
-            det[:, :4] = scale_coords(inf_shape, det[:, :4], ori_imgs[i].shape).round()
+    # process detections        
+    if det is not None and len(det):
+        # if i == 0: print(f"DETECT: total {len(det)} boxes")
+        det[:, :4] = scale_coords(inf_shape, det[:, :4], ori_img.shape).round()
 
-            for *xyxy, conf, cls in reversed(det):
-                label = '%s %.2f' % (classes[int(cls)], conf)
-                plot_one_box(xyxy, ori_imgs[i], label=label, color=colors[int(cls)])
+        for *xyxy, conf, cls in reversed(det):
+            label = '%s %.2f' % (classes[int(cls)], conf)
+            plot_one_box(xyxy, ori_img, label=label, color=colors[int(cls)])
+
+    return ori_img

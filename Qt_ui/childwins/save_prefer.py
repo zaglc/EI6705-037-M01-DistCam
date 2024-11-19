@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QApplication, QDialog, QLabel, QGridLayout, 
     QSpinBox, QWidget, QMainWindow, QLineEdit, QFrame,
     QFormLayout, QCheckBox, QDialogButtonBox, QHBoxLayout,
-    QPushButton, QSizePolicy, QFileDialog
+    QPushButton, QSizePolicy, QFileDialog,
 )
 from PyQt6.QtCore import Qt, QSize, QRect, QPoint, QRegularExpression as QRE
 import sys, os
@@ -347,12 +347,12 @@ class childWindow(QDialog):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     testwin = childWindow(None, 6, [
-        [1920, 1080],
-        [1920, 1080],
-        [1920, 1080],
-        [2560, 1440],
-        [2688, 1520],
-        [2688, 1520]], ["doc/figs/"+f for f in sorted(os.listdir("doc/figs"))], "data/temp/box_config.json")
+        [1920, 1080, 0],
+        [1920, 1080, 0],
+        [1920, 1080, 0],
+        [2560, 1440, 0],
+        [2688, 1520, 0],
+        [2688, 1520, 0]], [None], "data/temp/box_config.json")# ["doc/figs/"+f for f in sorted(os.listdir("doc/figs"))]
     ret = testwin.exec()
     if ret:
         if not os.path.exists("data/temp/"):
@@ -361,6 +361,6 @@ if __name__ == "__main__":
                 old_dicts = json.load(f)
             with open("data/temp/box_config.json", 'w') as f:
                 old_dicts.update(testwin.gather_infos())
-                json.dump(old_dicts, f)
+                json.dump(old_dicts, f, indent=4)
     testwin.destroy()
     sys.exit(ret)

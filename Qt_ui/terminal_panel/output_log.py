@@ -5,7 +5,6 @@ from PyQt6.QtWidgets import (
     QToolBar, QWidget,
 )
 
-from Qt_ui.utils import gpc_stream
 from Qt_ui.threads import QThread4stdout
 
 
@@ -28,21 +27,13 @@ class terminal(QToolBar):
         self.addWidget(outer)
 
     
-    def redirect_stdout_slot(self, suffix: str):
+    def redirect_stdout_slot(self, text: str):
         """
         redirect terminal output to Qt widget
         """
 
-        with gpc_stream.log_buffer.get_lock():
-            with gpc_stream.offset.get_lock():
-                ofs = gpc_stream.offset.value
-            if ofs == 0: return
-
-            text = gpc_stream.log_buffer[:ofs].decode()
-            gpc_stream.offset.value = 0
-
         cursor = self.output_text.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
-        cursor.insertText(text+suffix)
+        cursor.insertText(text)
         self.output_text.setTextCursor(cursor)
         self.output_text.ensureCursorVisible()

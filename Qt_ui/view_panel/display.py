@@ -1,4 +1,5 @@
 import functools
+from multiprocessing import Queue
 from PyQt6.QtWidgets import (
     QGridLayout, QStatusBar, QWidget, QMainWindow
 )
@@ -16,12 +17,9 @@ class Ui_MainWindow(QWidget):
     def __init__(
             self, 
             parent: QMainWindow, 
-            num_cam, 
-            frame_pa_conn,
-            frame_flag,
-            frame_val4exec_seq,
-            num_channel,
-            frame_buffer,
+            num_cam: int,
+            frame_queues: List[Queue], 
+            command_queues: List[Queue],
         ) -> None:
         """
         define layout for six cameras
@@ -49,17 +47,10 @@ class Ui_MainWindow(QWidget):
         mid = (self.num_cam + 1) // 2
 
         for i in range(self.num_cam):
-            thread_params = [i, 
-                frame_pa_conn[i], 
-                frame_flag[i], 
-                frame_val4exec_seq[i], 
-            ]
-            
             win = frame_win(i, 
                 ctw, 
-                num_channel[i], 
-                frame_buffer[i], 
-                thread_params, 
+                frame_queues[i],
+                command_queues[i],
                 self.fmin_size
             )
             func = functools.partial(self.single_view_btn_slot, i)

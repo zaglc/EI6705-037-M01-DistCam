@@ -27,16 +27,16 @@ class ctrl_panel(QToolBar):
     # signal to be triggered when pushing CAPTURE btn
     camera_btn_signal = pyqtSignal()
 
-    # singal to be triggered when pushing RECORD btn
+    # signal to be triggered when pushing RECORD btn
     record_btn_signal = pyqtSignal(int)
+
+    # signal to be triggered when pushing other PTZ btns
+    ptz_btn_signal = pyqtSignal(int, int, int)
 
     def __init__(
             self, 
             parent: QWidget, 
             num_cam: int,
-            conn: Connection,
-            cond: Condition,
-            exec_seq: SynchronizedBase,
         ) -> None:
         """
         Args:
@@ -50,9 +50,6 @@ class ctrl_panel(QToolBar):
 
         super().__init__("Ctrl Panel", parent=parent)
         self.num_cam = num_cam
-        self.conn = conn
-        self.cond = cond
-        self.exec_seq = exec_seq
 
         # internal params
         self.if_pressed = False
@@ -146,22 +143,12 @@ class ctrl_panel(QToolBar):
         """
         slot func invoke after pushing PTZ ctrl button
         """
-
-        while True:
-            with self.exec_seq.get_lock():
-                if self.exec_seq.value == 1:
-                    self.exec_seq.value = 0
-                    break
-        
-        # when there's a ctrl signal, awake the subprocess in charge of ctrl 
-        with self.cond:
-            self.cond.notify_all()
         
         if self.if_pressed:
-            self.conn.send((self.selected_cam, cmd, 1))
+            self.ptz_btn_signal.emit(self.selected_cam, cmd, 1)
             self.if_pressed = False
         else:
-            self.conn.send((self.selected_cam, cmd, 0))
+            self.ptz_btn_signal.emit(self.selected_cam, cmd, 0)
             self.if_pressed = True
 
 
@@ -178,10 +165,7 @@ class ctrl_panel(QToolBar):
         slot func invoke after pushing RECORD button
         """
 
-        if not self.is_recording:
-            self.record_btn_signal.emit(1)
-        else:
-            self.record_btn_signal.emit(0)
+        self.record_btn_signal.emit()
 
 
     def setupUi(self, MainWindow: QMainWindow):
