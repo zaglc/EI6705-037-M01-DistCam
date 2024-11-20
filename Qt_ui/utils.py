@@ -1,5 +1,25 @@
-from PyQt6.QtCore import QObject, pyqtSignal
-from PyQt6.QtWidgets import QApplication
+from multiprocessing import Queue
+import cv2, numpy as np, os, datetime
+
+# suffix 'Q' means cmd set by QThread
+# otherwise by frame main
+FV_QTHREAD_READY_Q = 2
+FV_FRAME_PROC_READY_F = 3
+FV_SWITCH_CHANNEL_Q = 4
+FV_PKGLOSS_OCCUR_F = 5
+FV_CAPTURE_IMAGE_Q = 6
+FV_RECORD_VIDEO_Q = 7
+FV_FLIP_SIMU_STREAM_Q = 8
+FV_FLIP_MODEL_ENABLE_Q = 9
+FV_PTZ_CTRL_Q = 10
+FV_QTHREAD_PAUSE_Q = 16
+
+RS_STOP = 0
+RS_WAITING = 1
+RS_RUNNING = 2
+
+FV_STOP = 0
+FV_RUNNING = 2
 
 
 def generate_pos(size: tuple, num_cam: int):
@@ -17,15 +37,75 @@ def generate_pos(size: tuple, num_cam: int):
         index += 1
 
 
-class Stream(QObject):
+def pad_with_fixed_ratio(img: np.ndarray, width: int, height: int, id: int):
+    old_h, old_w, _ = img.shape
+    if old_h / old_w > height / width:
+        w_cmp = int(old_h * width / height) // 2 - old_w // 2
+        img_new = cv2.copyMakeBorder(img, 0 ,0, w_cmp, w_cmp, cv2.BORDER_CONSTANT, value=[127,127,127])
+    else:
+        h_cmp = int(old_w * height / width) // 2 - old_h // 2
+        img_new = cv2.copyMakeBorder(img, h_cmp, h_cmp, 0, 0, cv2.BORDER_CONSTANT, value=[127,127,127])
+
+    return img_new, img_new.shape[1], img_new.shape[0]
+
+# TODO: useful if we need to arbitrarily pause frame window
+def sync_processes(cond, cnt, total: int):
+    with cnt.get_lock():
+        cnt.value += 1
+        tmp = cnt.value
+
+    with cond:
+        if tmp < total:
+            cond.wait()
+        else:
+            with cnt.get_lock():
+                cnt.value = 0
+            cond.notify_all()
+
+
+def count_nonactive_proc(shape_cnt, local_size: int):
+    return local_size - sum([shape_cnt[4*i+3] for i in range(local_size)])
+
+
+class Stream():
     """
     Adopt from https://blog.csdn.net/quay_sue/article/details/133841837
+    
+    log format:
+    [MODEL/FRAME/CTRL x at time]: (content...)
+    
     """
 
-    newText_signal = pyqtSignal(str)
+    def __init__(self) -> None:
 
-    def write(self, text: str):
-        self.newText_signal.emit(text)
-        QApplication.processEvents()
+        self.log_buffer = Queue()
+        self.proc_table = dict()
+
+
+    def write(self, text: str) -> None:
+        pid = os.getpid()
+        curtime = datetime.datetime.now().strftime('%H:%M:%S')
+        try:
+            name = self.proc_table[pid]
+        except:
+            name = "None-proc"
+
+        # python `print` will invoke this method causing `end` is not None
+        if len(text) > 2:
+            new_text = f"[{name} at {curtime}]: " + text + "\n"
+        else:
+            new_text = text
+
+        self.log_buffer.put(new_text)
+
+
+    def flush(self) -> None:
+        # TODO: if needed
+        pass
+
+
+    def _add_item(self, pid: int, name: str):
+        self.proc_table.update({pid: name})
+
 
 gpc_stream = Stream()

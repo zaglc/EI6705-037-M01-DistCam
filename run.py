@@ -1,144 +1,252 @@
-from Qt_ui.mainwin import custom_window
-import sys, os, numpy as np
-from PyQt6 import QtCore, QtGui, QtWidgets
-import json
-from multiprocessing import Value, Array, Pipe, Process, Pool, Condition as cond
-from multiprocessing.synchronize import Condition
+import time, ctypes, json
+import sys, numpy as np, os
+from PyQt6.QtWidgets import QApplication
+from multiprocessing import Queue, Process
+from queue import Empty, Queue as TQueue
 from typing import List
+import torch
 
 from central_monitor.camera_top import Camera
-from Qt_ui.utils import gpc_stream
-import time, ctypes
+from Qt_ui.mainwin import custom_window
+from Qt_ui.utils import (
+    gpc_stream, Stream, sync_processes, count_nonactive_proc
+)
+from Qt_ui.utils import (
+    FV_FRAME_PROC_READY_F, 
+    FV_SWITCH_CHANNEL_Q, FV_PKGLOSS_OCCUR_F, 
+    FV_CAPTURE_IMAGE_Q, FV_RECORD_VIDEO_Q, 
+    FV_FLIP_SIMU_STREAM_Q, FV_FLIP_MODEL_ENABLE_Q, 
+    FV_QTHREAD_PAUSE_Q, FV_PTZ_CTRL_Q,
+    FV_RUNNING, FV_STOP,
+    RS_RUNNING, RS_STOP, RS_WAITING
+)
+from running_models.extern_model import (
+    initialize_model, process_result, preprocess_img, non_max_suppression
+)
 
+WAITING_TIME = 0.01
 
-# 分两个子进程处理按帧取图和相机控制
-def frame_Main(camera: Camera, frame_flag: Condition, frame_pipeObj, frame_val4exec_seq, frame_val4save_pth, frame_buffer, run_flag):
-    # sys.stdout = gpc_stream
-    out_pipeObj, in_pipeObj = frame_pipeObj
-    out_pipeObj.close()
-    camera.viewer.start_thread(frame_buffer)
-    while True:
-        time0 = time.time()
-        with frame_flag:
-            with frame_val4exec_seq.get_lock():
-                need_switch = frame_val4exec_seq.value == 2
-                need_capture = frame_val4exec_seq.value == 4
-                need_record = frame_val4exec_seq.value == 5
-                with frame_val4save_pth.get_lock():
-                    capture_pth = frame_val4save_pth.value
-                frame_val4exec_seq.value = 1
-                with camera.viewer._lock:
-                    pkg_loss = camera.viewer.package_loss > 0
-                    camera.viewer.package_loss = 0
-                if pkg_loss:
-                    frame_val4exec_seq.value = 3
+# TODO: so many todo...
+def model_Main(
+        local_num_cam: int, 
+        ddp_id: int, 
+        data_queue: Queue,
+        result_queue: List[Queue],
+        stream: Stream,
+    ) -> None:
+    """
+    process for model inference
+    """
+    # sys.stdout = stream
+    stream._add_item(os.getpid(), f"MODEL {ddp_id}")
 
-            frame_flag.wait()
-
-            with run_flag.get_lock():
-                if run_flag.value == 0: break
-
-            
-            if need_switch:
-                camera.viewer.switch_cam()
-            time1 = time.time()
-            shape = camera.viewer.fetch_frame(need_capture, need_record, capture_pth.decode())
-            time2 = time.time()
-            if shape is not None:
-                in_pipeObj.send(shape)
-            time3 = time.time()
-            # if camera.id == 0:
-            #     print("send: ", round(time2-time1, 6), round(time3-time2, 6))
-
-    with camera.viewer._lock:
-        camera.viewer.run_flag = False
-    camera.viewer.thread.join()
-    in_pipeObj.close()
-    # sys.stdout = sys.__stdout__
+    # model loading and cuda memory pre-allocating
+    batch = 4
+    running_status = RS_WAITING
+    model, device, classes, colors = initialize_model(local_num_cam)
+    for queue in result_queue:
+        queue.put((classes, colors))
     
-
-def ctrl_Main(cameras: List[Camera], ctrl_flag, ctrl_pipeObj, ctrl_val4exec_seq, run_flag):
-    # sys.stdout = gpc_stream
-    out_pipeObj, in_pipeObj = ctrl_pipeObj
-    in_pipeObj.close()
     while True:
-        with ctrl_flag:
-            with ctrl_val4exec_seq.get_lock():
-                ctrl_val4exec_seq.value = 1
-            ctrl_flag.wait()
+        # if model inference is needed, data to be inferenced will be in data_queue
+        # rank-0 send start and end signal
+        fetch, tsr_lst, sender_lst = 0, [], []
+        while fetch < batch:
+            if running_status == RS_WAITING:
+                (vid_id, running_status, _) = data_queue.get()
 
-            with run_flag.get_lock():
-                if run_flag.value == 0: break
+            if running_status == RS_WAITING: continue
+            elif running_status == RS_STOP: break
+            else:
+                try:
+                    (vid_id, running_status, tsr) = data_queue.get(timeout=WAITING_TIME)
+                    if running_status == RS_RUNNING:
+                        if tsr is None:
+                            tsr_lst.append(tsr)
+                            sender_lst.append(vid_id)
+                            fetch += 1
+                    else:
+                        data_queue.empty()
+                        break
+                except Empty:
+                    break
 
-            ctrl = out_pipeObj.recv()
-            assert isinstance(ctrl, tuple), "type error"
-            assert len(ctrl) == 3, "expecting trible tuple control signal"
-            cur_active = int(ctrl[0])
-            if cur_active != -1:
-                cameras[cur_active].controller.handle_ctrl(ctrl[1:])
+        # no matter which frame submit data, inference will be executed when enough data is collected
+        if fetch > 0:
+            chunk_tsr = torch.cat(tsr_lst, dim=0)
+            chunk_tsr = chunk_tsr.to(device)
+            results = model(chunk_tsr, augment=False)[0]
+            results = results.clone().detach().cpu()
 
-    out_pipeObj.close()
-    # sys.stdout = sys.__stdout__
+        # dispatch results to corresponding process
+        for i in range(fetch):
+            results = non_max_suppression(results, conf_thres=0.3, multi_label=False)
+            result_queue[sender_lst[i]].put((results[i], ))
+
+        # process image and execute inference
+        # preprocess_img(chunk_tsr, img_lst, img_size, device, active_id)
+        # process_result(img_lst, img_size, results, classes, colors)
+
+        if running_status == RS_STOP: break
+
+    sys.stdout = sys.__stdout__
 
 
-def initialize(file: str):
+def frame_Main(
+        camera: Camera, 
+        frame_write_queue: Queue, # main -> frame_main
+        command_read_queue: Queue, # frame_main -> main
+        data_queue: Queue, # frame_main, main -> model_main
+        result_queue: Queue, # model_main -> frame_main
+        stream: Stream,
+    ) -> None:
+    """
+    process for image display
+    """
+
+    # start thread which continously reading videocapture
+    # sys.stdout = stream
+    stream._add_item(os.getpid(), F"FRAME {camera.id}")
+    classes, colors = result_queue.get()
+
+    frame_read_queue = TQueue()
+    local_command_queue = TQueue()
+    # TODO: 可以早点开始
+    camera.start_thread(frame_read_queue, local_command_queue)
+    frame_write_queue.put((camera.resolution))
+
+    model_run = RS_WAITING
+    ret_val_main = FV_FRAME_PROC_READY_F
+    frame_status = FV_RUNNING
+    while True:
+        # get frame
+        (frame, pkg_loss) = frame_read_queue.get()
+        if pkg_loss:
+            ret_val_main = FV_PKGLOSS_OCCUR_F
+        if model_run == RS_RUNNING:
+            tsr = preprocess_img(frame)
+            data_queue.put((camera.id, model_run, tsr))
+            try:
+                (result, ) = result_queue.get(WAITING_TIME)
+                frame = process_result(frame, result, colors, classes)
+            except Empty:
+                pass
+        frame_write_queue.put((frame, (ret_val_main, pkg_loss), camera.frame_config))
+        ret_val_main = FV_FRAME_PROC_READY_F
+
+        # get command
+        (frame_status, cmd, cmd_val) = command_read_queue.get()
+        if frame_status == FV_RUNNING:
+            # get some commands needed by current cycle
+            # TODO: set button enable/disable for these functions
+            need_switch = cmd == FV_SWITCH_CHANNEL_Q
+            need_capture = cmd == FV_CAPTURE_IMAGE_Q
+            need_record = cmd == FV_RECORD_VIDEO_Q
+            need_refresh = cmd == FV_FLIP_SIMU_STREAM_Q
+            need_model = cmd == FV_FLIP_MODEL_ENABLE_Q
+            need_pause = cmd == FV_QTHREAD_PAUSE_Q
+            need_ctrl = cmd == FV_PTZ_CTRL_Q
+
+            if need_pause:
+                camera.viewer.flip_inter_val("need_send")
+            elif need_switch:
+                # TODO: 挂窗口槽函数
+                camera.switch_vid_src(*cmd_val)
+            elif need_refresh:
+                camera.viewer.flip_inter_val("simu_stream")
+            elif need_model:
+                model_run = RS_RUNNING if model_run == RS_WAITING else RS_WAITING
+                strr = "enabled" if model_run else "disabled"
+                print(f"model inference {strr}",end=None)
+            elif need_capture:# TODO: viewer自己把图片存好后翻转
+                camera.viewer.flip_inter_val("need_capture")
+            elif need_record:
+                camera.viewer.flip_inter_val("need_record")
+            elif need_ctrl:
+                camera.controller.handle_ctrl(cmd_val)
+
+        else:
+            camera.viewer.flip_inter_val("need_send")
+            camera.viewer.flip_inter_val("is_running")
+            break
+
+    for thread in camera.viewer.threads.values():
+        if thread.is_alive(): 
+            thread.join()
+    camera.controller.is_running = False
+    camera.controller._local_command_queue.put((0, 0))
+    camera.controller.thread.join()
+    sys.stdout = sys.__stdout__
+
+
+def initialize(file: str, num_cam: int = 6):
+    """
+    initial all things from config file
+    """
+
     # sys.stdout = gpc_stream
+    gpc_stream._add_item(os.getpid(), "MAIN")
+
     with open(file, 'r') as f:
         config = json.load(f)
-    num_cam = config["cam_num"]
-    resolution = config["resolution"]
-    camera_lst = [Camera(config["login"][i], i) for i in range(num_cam)]
+    
+    # number of cameras, size of data parallel
+    default = config["choices"]
+    srcs = config["sources"]
+    ddp = 1
+    camera_lst = [Camera(default[i][0], srcs[default[i][0]][-1], i, num_cam, ddp) for i in range(num_cam)]
+    
+    assert num_cam % ddp == 0
 
-    run_flag = Value('i', 1)
-    ctrl_flag = cond()
-    frame_flag = [cond() for _ in range(num_cam)]
-    ctrl_pipe = Pipe()
-    frame_pipe_lst = [Pipe() for _ in range(num_cam)]
-    ctrl_val4exec_seq = Value('i', 1)
-    frame_val4exec_seq = [Value('i', 1) for _ in range(num_cam)]
-    frame_val4save_pth = [Array('c', 1024) for _ in range(num_cam)]
-    frame_buffer = [Array(ctypes.c_uint8, s[0]*s[1]*3, lock=True) for _, s in zip(range(num_cam), resolution)]
+    # for data to be inferenced
+    data_queues = [Queue() for _ in range(ddp)]
+    # for result of inference
+    result_queues = [Queue() for _ in range(num_cam)]
+    # for frame to be transmitted to main process
+    frame_write_queues = [Queue() for _ in range(num_cam)]
+    # for receiving command from main process
+    command_queues = [Queue() for _ in range(num_cam)]
 
+    # prepare processes
     cam_pool: List[Process] = []
-    for i in range(num_cam):
+    length = num_cam//ddp
+    for ddp_idx in range(ddp):
+        cam_pool.append(
+            Process(
+                target=model_Main, 
+                args=(
+                    length,
+                    ddp_idx,
+                    data_queues[ddp_idx], 
+                    result_queues[ddp_idx*length:(ddp_idx+1)*length], 
+                    gpc_stream,
+                ),
+            )
+        )
+
+    for cam_idx in range(num_cam):
         cam_pool.append(
             Process(            
                 target=frame_Main,
                 args=(
-                    camera_lst[i],
-                    frame_flag[i],
-                    frame_pipe_lst[i],
-                    frame_val4exec_seq[i],
-                    frame_val4save_pth[i],
-                    frame_buffer[i],
-                    run_flag, 
+                    camera_lst[cam_idx],
+                    frame_write_queues[cam_idx],
+                    command_queues[cam_idx],
+                    data_queues[cam_idx//length],
+                    result_queues[cam_idx],
+                    gpc_stream,
                 ),
             )
         )
-    
-    cam_pool.append(
-        Process(target=ctrl_Main, args=(camera_lst, ctrl_flag, ctrl_pipe, ctrl_val4exec_seq, run_flag),)
-    )
 
-    # run_flag.acquire(True)
-    # for cd in frame_flag: cd.acquire(False)
     for proc in cam_pool: proc.start()
-    for pipe in frame_pipe_lst: pipe[1].close()
-    ctrl_pipe[0].close()    
 
     ret = {
         "num_cam": num_cam,
-        "run_flag": run_flag,
-        "frame_flag": frame_flag,
-        "ctrl_flag": ctrl_flag,
-        "ctrl_pa_conn": ctrl_pipe[1],
-        "ctrl_val4exec_seq": ctrl_val4exec_seq,
-        "frame_pa_conn": [frame_pipe_lst[i][0] for i in range(num_cam)],
-        "frame_val4exec_seq": frame_val4exec_seq,
-        "frame_val4save_pth": frame_val4save_pth,
-        "frame_buffer": frame_buffer,
-        "num_channel": [len(config["login"][i]) for i in range(num_cam)],
-        "resolution": resolution,
+        "data_queues": data_queues,
+        "result_queues": result_queues,
+        "frame_write_queues": frame_write_queues,
+        "command_queues": command_queues,
         "pool": cam_pool,
     }
 
@@ -146,12 +254,8 @@ def initialize(file: str):
 
 
 if __name__ == '__main__':
-
-    gpc = initialize("./configs/camera_template.json")
-    app = QtWidgets.QApplication(sys.argv)
+    gpc = initialize("./configs/video_source_pool.json", 2)
+    app = QApplication(sys.argv)
     MainWindow = custom_window(gpc)
-
     MainWindow.show()
-    run_flag = gpc["run_flag"]
-
     sys.exit(app.exec())

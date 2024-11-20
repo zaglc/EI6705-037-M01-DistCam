@@ -1,8 +1,14 @@
 # down load from hkvision's website
 
 import ctypes
+import platform
 import sys
 from ctypes import *
+
+def system_get_platform_info():
+    sys_platform = platform.system().lower().strip()
+
+    return sys_platform
 
 # 回调函数类型定义
 try:

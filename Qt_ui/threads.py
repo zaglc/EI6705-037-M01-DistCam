@@ -1,114 +1,176 @@
-from PyQt6 import QtCore
+from PyQt6.QtCore import (
+    QThread, pyqtSignal, QObject, QMutex, QWaitCondition, QMutexLocker,
+)
 import time
 import numpy as np
-from multiprocessing.connection import Connection
-from multiprocessing import Process
-from multiprocessing.synchronize import Condition
+from multiprocessing import Queue
+from queue import Queue as TQueue
 
-class QThread4VideoDisplay(QtCore.QThread):
+from Qt_ui.utils import (
+    FV_QTHREAD_READY_Q, FV_FRAME_PROC_READY_F, 
+    FV_SWITCH_CHANNEL_Q, FV_PKGLOSS_OCCUR_F, 
+    FV_CAPTURE_IMAGE_Q, FV_RECORD_VIDEO_Q, 
+    FV_FLIP_SIMU_STREAM_Q, FV_FLIP_MODEL_ENABLE_Q,
+    FV_QTHREAD_PAUSE_Q, FV_PTZ_CTRL_Q,
+    FV_STOP, FV_RUNNING
+)
+from Qt_ui.utils import gpc_stream
 
-    send_signal = QtCore.pyqtSignal(tuple)
-    switch_btn_recover_signal = QtCore.pyqtSignal()
-    realtime_tab_singal = QtCore.pyqtSignal(tuple)
-    camera_capture_recover_signal = QtCore.pyqtSignal()
-    camera_record_recover_signal = QtCore.pyqtSignal()
+
+class QThread4VideoDisplay(QThread):
+    """
+    QThread possessed by each frame window
+    in charge of sending msg such as capture img, updating frame window
+    """
+
+    send_signal = pyqtSignal(tuple)
+    switch_btn_recover_signal = pyqtSignal()
+    realtime_tab_singal = pyqtSignal(tuple)
+    camera_capture_recover_signal = pyqtSignal()
     
     def __init__(
             self, 
             thread_id: int,
-            conn: Connection,
-            cond: Condition,
-            exec_seq,
-            save_pth,
-            lock_switch,
-            parent: QtCore.QObject = None,
+            frame_queue: Queue,
+            command_queue: Queue,
+            loc_frame_queue: TQueue,
+            parent: QObject = None,
         ) -> None:
+        """
+        Args: the same as args in `display.py`
+        """
 
         super().__init__(parent)
         self.id = thread_id
-        self.conn = conn
-        self.cond = cond
-        self.exec_seq = exec_seq
-        self.save_pth = save_pth
-        self.switch_flag = False
-        self.switch_cam_lock = lock_switch
+        self.frame_queue = frame_queue
+        self.command_queue = command_queue
+        self.loc_frame_queue = loc_frame_queue
+
+        # ctrl info, when no signal received, it is None
+        self.ctrl_info = None
+        
+        # cv2 videocapture has read buffer of size 3
         self.frame_cache_len = 3
+        
+        # QLock protecting internal, infrequently called variables
+        self.switch_cam_lock = QMutex()
+        self.Qconds = QWaitCondition()
+        
+        # internal variable
+        self.switch_flag = False
+        self.need_refresh_cam_flag = False
+        self.model_flag = False
+
         self.display_real_flag = 0
-        self.camera_btn_path = None
-        self.record_btn_path = None
-        self.is_recording = False
+        self.camera_active = 0
+        self.record_active = 0
 
-        self.time = 0
-        self.cnt = 0
+        self.pause_flag = False
+        self.is_paused = True
+        self.is_running = True
     
+
     def run(self):
-        # 发射后开始定时，并需求下一张，定时结束后再发射
-        while True:
-            # if self.id == 0: print("here1")
-            time0 = time.time()
-            self.switch_cam_lock.lock()
-            # 拿信息后销毁
-            flag = self.switch_flag
-            self.switch_flag = False
-            cam_path = self.camera_btn_path
-            self.camera_btn_path = None
-            rec_path = self.record_btn_path
+        """
+        Main loop for QThread4VideoDisplay
+        """
 
-            self.switch_cam_lock.unlock()
-            # if self.id == 0: print("here2")
-            while True:
-                with self.exec_seq.get_lock():
-                    if self.exec_seq.value == 1 or self.exec_seq.value == 3:
-                        drop_flag = self.exec_seq.value == 3
-                        
-                        self.exec_seq.value = 2 if flag else 0
-                        if cam_path is not None: 
-                            self.exec_seq.value = 4
-                            with self.save_pth.get_lock():
-                                self.save_pth.value = cam_path.encode()
-                        elif rec_path is not None: 
-                            self.exec_seq.value = 5
-                            if not self.is_recording:
-                                self.is_recording = True
-                                with self.save_pth.get_lock():
-                                    self.save_pth.value = rec_path.encode()
-                        break
-            time1 = time.time()
-            self.cond.acquire(True)
-            self.cond.notify_all()
-            self.cond.release()
-            time2 = time.time()
-            # if self.id == 0: print("here3")
-            try:
-                shape = self.conn.recv()
-            except EOFError:
-                break
-            time3 = time.time()
-
-            self.send_signal.emit(shape)
-
-            if flag:
-                self.switch_btn_recover_signal.emit()
-            time4 = time.time()
-
-            self.realtime_tab_singal.emit((self.id, time4-time0, self.frame_cache_len if drop_flag else 0, self.display_real_flag == 0))
-            self.display_real_flag = (self.display_real_flag + 1) % 5
-
-            if cam_path is not None:
-                self.camera_capture_recover_signal.emit()
-                print(f"finish capture of camera {self.id}")
-            elif rec_path is None and self.is_recording:
-                self.is_recording = False
-                self.camera_record_recover_signal.emit()
-                print(f"finish record of camera {self.id}")
-
-            # print(time4-time3)
-
+        time0 = time.time()
+        while True:    
             
-            # if self.id == 0:
-            #     print(self.id, round(time1-time0, 6), round(time2-time1, 6), round(time3-time2, 6), round(time4-time3, 6))
-            #     if self.cnt >= 5:
-            #         self.time += time4-time1
-            #     if self.cnt >= 20:
-            #         print(self.time/(self.cnt-5))
-            #     self.cnt += 1
+            # fetch context and destory when necessary
+            self.switch_cam_lock.lock()
+            # action: simultaneous streaming
+            refresh_cam_flag = self.need_refresh_cam_flag
+            self.need_refresh_cam_flag = False
+            # buttons: up, down, left, right...
+            ctrl_info = self.ctrl_info
+            ctrl_flag = ctrl_info is not None
+            self.ctrl_info = None
+            # button: video source switching
+            switch_flag = self.switch_flag
+            self.switch_flag = False
+            # action: model inference on or off
+            model_flag = self.model_flag
+            self.model_flag = False
+            # button: camera capture
+            cam_f = self.camera_active
+            self.camera_active = 0
+            # button: camera record
+            rec_f = self.record_active
+            self.record_active = 0
+            # action: real-time video preview on or off
+            pause_flag = self.pause_flag
+            self.pause_flag = False
+            self.switch_cam_lock.unlock()
+
+            # get frame from frame_queue
+            frame, (ret_status, ret_val), cam_config = self.frame_queue.get()
+            drop_flag = ret_status == FV_PKGLOSS_OCCUR_F
+            
+            # trigger frame window image updating
+            if not self.is_paused:
+                self.loc_frame_queue.put(frame)
+                self.send_signal.emit(cam_config)
+                # if len(frame.shape) == 3:
+                #     self.is_paused = True
+
+            # prepare command for frame_process, each period <--> one command
+            ret_cmd = FV_QTHREAD_READY_Q
+            if pause_flag:
+                self.is_paused = not self.is_paused
+                ret_cmd = FV_QTHREAD_PAUSE_Q
+            elif switch_flag:
+                self.switch_btn_recover_signal.emit()
+                ret_cmd = FV_SWITCH_CHANNEL_Q
+            elif refresh_cam_flag:
+                ret_cmd = FV_FLIP_SIMU_STREAM_Q
+            elif model_flag:
+                ret_cmd = FV_FLIP_MODEL_ENABLE_Q
+            elif ctrl_flag:
+                ret_cmd = FV_PTZ_CTRL_Q
+            elif cam_f:
+                self.camera_capture_recover_signal.emit()
+                ret_cmd = FV_CAPTURE_IMAGE_Q
+            elif rec_f: 
+                ret_cmd = FV_RECORD_VIDEO_Q
+                
+            time4 = time.time()
+            # print(time4-time0)
+
+            # trigger data table updating
+            self.realtime_tab_singal.emit((self.id, max(time4-time0, 0.02), ret_val if drop_flag else 0, self.display_real_flag == 0))
+            self.display_real_flag = (self.display_real_flag + 1) % 5
+            time0 = time4
+
+            # write command to frame_main
+            self.command_queue.put((FV_RUNNING if self.is_running else FV_STOP, ret_cmd, ctrl_info))
+            if not self.is_running:
+                break
+
+
+class QThread4stdout(QThread):
+    """
+    QThread for output redirection: from terminal to text widget
+    """
+
+    redirect_signal = pyqtSignal(str)
+
+    def __init__(
+            self, 
+            parent: QObject = None,
+        ) -> None:
+        
+        super().__init__(parent)
+        self.is_running = True
+
+
+    def run(self):
+        """
+        Main loop for QThread4stdout
+        """
+        while True:
+            text = gpc_stream.log_buffer.get()
+            self.redirect_signal.emit(text)
+            if not self.is_running:
+                break

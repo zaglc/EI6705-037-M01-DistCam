@@ -1,8 +1,11 @@
-from PyQt6 import QtCore, QtGui, QtWidgets
-from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView, QGridLayout
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QTableWidget, QTableWidgetItem, QHeaderView, QGridLayout,
+    QToolBar, QWidget,
+)
 
 
-class Realtime_Datatab(QtWidgets.QToolBar):
+class Realtime_Datatab(QToolBar):
     """
     data panel in QT mainwindow
     now it only includes FRAME RATE and DROP RATE
@@ -11,7 +14,7 @@ class Realtime_Datatab(QtWidgets.QToolBar):
     """
     
     def __init__(self,
-                 parent: QtWidgets.QWidget,
+                 parent: QWidget,
                  num_cam: int,
     ):
         super().__init__("tool bar", parent)
@@ -22,56 +25,53 @@ class Realtime_Datatab(QtWidgets.QToolBar):
         } for _ in range(num_cam)]
         self.valud_keys = ["fps", "drop"]
 
-        self.rs, self.cs = 2, num_cam
+        self.rs, self.cs = num_cam, 2
         self.table = QTableWidget(parent=self)
-        self.table.setRowCount(2)
-        rowhead = ["FRAME RATE/fps", "DROP RATE"]
-        self.table.setVerticalHeaderLabels(rowhead)
-        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch) 
 
-        self.table.setColumnCount(num_cam)
-        colhead = [f"CAM {i}" for i in range(num_cam)]
+        self.table.setColumnCount(self.cs)
+        colhead = ["FRAME RATE", "DROP RATE"]
         self.table.setHorizontalHeaderLabels(colhead)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch) 
+
+        self.table.setRowCount(self.rs)
+        rowhead = [f"CAM {i}" for i in range(self.rs)]
+        self.table.setVerticalHeaderLabels(rowhead)
+        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
         # initial table
-        for j in range(self.cs):
-            self._updateTabItem(j)
+        for i in range(self.rs):
+            self._updateTabItem(i)
 
         grid = QGridLayout()
         grid.setSpacing(5)
-        grid.addWidget(self.table, 0, 0, 0, 14)
-        outer = QtWidgets.QWidget(self)
-        outer.setMinimumSize(800, 60)
+        grid.addWidget(self.table, 0, 0, 5, 0)
+        outer = QWidget(self)
+        outer.setMinimumSize(200, 200)
+        # outer.setMaximumWidth(200)
         outer.setLayout(grid)
-
-        # self.setLayout(grid)
-        self.grid = grid
         self.addWidget(outer)
 
 
-    def _updateTabItem(self, col: int):
+    def _updateTabItem(self, row: int):
         """
         update data panel with current data
         """
         
-        for row in range(self.rs):
-            val, _, fmt = self.value_dicts[col][self.valud_keys[row]]
-            if self.valud_keys[row] == "fps": val = 1/(val+1e-10)
+        for col in range(self.cs):
+            val, _, fmt = self.value_dicts[row][self.valud_keys[col]]
+            if self.valud_keys[col] == "fps": val = 1/(val+1e-10)
             item = QTableWidgetItem(str(round(val, fmt)))
-            item.setFlags(QtCore.Qt.ItemFlag.ItemIsEnabled)
-            item.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.table.setItem(row, col, item)
 
 
-    def _compute_slide_exp_average(self, new_val: list, col: int):
+    def _compute_slide_exp_average(self, new_val: list, row: int):
         """
-        use new_val to update all value for camera col internally
+        use new_val to update all value for camera row internally
         """
 
-        for row, val in zip(range(self.rs), new_val):
-            aver, rate, _ = self.value_dicts[col][self.valud_keys[row]]
+        for col, val in zip(range(self.cs), new_val):
+            aver, rate, _ = self.value_dicts[row][self.valud_keys[col]]
             aver = aver * rate + val * (1 - rate)
-            self.value_dicts[col][self.valud_keys[row]][0] = aver
-
-        
+            self.value_dicts[row][self.valud_keys[col]][0] = aver
