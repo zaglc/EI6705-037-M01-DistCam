@@ -22,5 +22,5 @@
 + set max frame window size
 
 ### PREVIEW 
-+ v2: ![local](preview/v2.png) 
-+ v3: ![local](preview/v3.png) 
++ v2: ![local](doc/figs/layout/v2.png) 
++ v3: ![local](doc/figs/layout/v3.png) 

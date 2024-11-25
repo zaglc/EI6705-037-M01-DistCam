@@ -1,0 +1,32 @@
+name: Format_check
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        python-version: ["3.6.9", "3.6.15"]
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # pip install pylint
+        pip install black==22.8.0
+        pip install isort==5.9.3
+    - name: isort-check
+      run: |
+        isort --check --profile=black $(git ls-files '*.py')
+    - name: black-check
+      run: |
+        BLACK_EXCLUDE_SETTINGS='\.venv/|\.local/|\.cache/|\.git/'
+        black --line-length=120 --check --exclude $BLACK_EXCLUDE_SETTINGS $(git ls-files '*.py')
+    # - name: Analysing the code with pylint
+      # run: |
+        # pylint $(git ls-files '*.py')

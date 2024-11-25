@@ -1,16 +1,19 @@
 # adopted from https://github.com/ultralytics/yolov3/tree/archive
 
-import numpy as np
-import torch, torchvision
+import random
 import time
-import cv2, random
 from typing import List
+
+import cv2
+import numpy as np
+import torch
+import torchvision
 
 
 def load_classes(path):
     # Loads *.names file at 'path'
-    with open(path, 'r') as f:
-        names = f.read().split('\n')
+    with open(path, "r") as f:
+        names = f.read().split("\n")
     return list(filter(None, names))  # filter removes empty strings (such as last line)
 
 
@@ -108,7 +111,7 @@ def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, multi_label=T
         c = x[:, 5] * 0 if agnostic else x[:, 5]  # classes
         boxes, scores = x[:, :4].clone() + c.view(-1, 1) * max_wh, x[:, 4]  # boxes (offset by class), scores
         i = torchvision.ops.boxes.nms(boxes, scores, iou_thres)
-        if merge and (1 < n < 3E3):  # Merge NMS (boxes merged using weighted mean)
+        if merge and (1 < n < 3e3):  # Merge NMS (boxes merged using weighted mean)
             try:  # update boxes as boxes(i,4) = weights(i,n) * boxes(n,4)
                 iou = box_iou(boxes[i], boxes) > iou_thres  # iou matrix
                 weights = iou * scores[None]  # box weights

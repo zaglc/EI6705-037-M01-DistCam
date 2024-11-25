@@ -1,19 +1,42 @@
-from PyQt6.QtGui import QMoveEvent, QPixmap, QImage, QResizeEvent, QRegularExpressionValidator as QRegExpV
-from PyQt6.QtWidgets import (
-    QApplication, QDialog, QLabel, QGridLayout, QVBoxLayout,
-    QSpinBox, QWidget, QMainWindow, QLineEdit, QFrame,
-    QFormLayout, QCheckBox, QDialogButtonBox, QHBoxLayout,
-    QPushButton, QSizePolicy, QListWidgetItem, QListWidget, QComboBox
-)
-from PyQt6.QtCore import Qt, QSize, QRect, QPoint, QRegularExpression as QRE
-import sys, os
-from typing import List
-from functools import partial
 import json
+import os
+import sys
+from functools import partial
+from typing import List
+
+from PyQt6.QtCore import QPoint, QRect
+from PyQt6.QtCore import QRegularExpression as QRE
+from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtGui import QImage, QMoveEvent, QPixmap
+from PyQt6.QtGui import QRegularExpressionValidator as QRegExpV
+from PyQt6.QtGui import QResizeEvent
+from PyQt6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMainWindow,
+    QPushButton,
+    QSizePolicy,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class vid_src_config_window(QDialog):
-    def __init__(self, parent: QMainWindow | None, vid_srcs: dict, current_vid_src: str, index: int, unselected: List[tuple]):
+    def __init__(
+        self, parent: QMainWindow | None, vid_srcs: dict, current_vid_src: str, index: int, unselected: List[tuple]
+    ):
         """
         vid_srcs:{
             "type":[
@@ -55,8 +78,12 @@ class vid_src_config_window(QDialog):
         # right part
         self.flayout = QFormLayout()
         self.buttonBox = QDialogButtonBox(parent=self)
-        self.buttonBox.setOrientation(Qt.Orientation.Horizontal) # 设置为水平方向
-        self.buttonBox.setStandardButtons(QDialogButtonBox.StandardButton.Cancel|QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Apply)
+        self.buttonBox.setOrientation(Qt.Orientation.Horizontal)  # 设置为水平方向
+        self.buttonBox.setStandardButtons(
+            QDialogButtonBox.StandardButton.Cancel
+            | QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Apply
+        )
         self.show_configuration_slot()
         self.buttonBox.accepted.connect(self.accept)
         self.buttonBox.rejected.connect(self.reject)
@@ -72,7 +99,6 @@ class vid_src_config_window(QDialog):
         hbox.addLayout(vbox)
         hbox.addLayout(vbox2)
         self.setLayout(hbox)
-
 
     def combobox_change_slot(self):
         """
@@ -90,7 +116,6 @@ class vid_src_config_window(QDialog):
         if hasattr(self, "buttonBox"):
             self.buttonBox.button(QDialogButtonBox.StandardButton.Apply).setEnabled(False)
 
-
     def show_configuration_slot(self):
         row_count = self.flayout.rowCount()
         for i in range(row_count - 1, -1, -1):
@@ -100,7 +125,7 @@ class vid_src_config_window(QDialog):
         index = self.listwidget.currentRow()
         apply_active_func = partial(self.buttonBox.button(QDialogButtonBox.StandardButton.Apply).setEnabled, True)
         for k, v in self.vid_srcs[text][index].items():
-            qline =  QLineEdit(self)
+            qline = QLineEdit(self)
             qline.textChanged.connect(apply_active_func)
             if v != "":
                 qline.setText(v)
@@ -108,7 +133,6 @@ class vid_src_config_window(QDialog):
                 qline.setPlaceholderText("enter content")
             self.flayout.addRow(k, qline)
         self.buttonBox.button(QDialogButtonBox.StandardButton.Apply).setEnabled(False)
-
 
     def update_config_slot(self):
         text = self.combobox.currentText()
@@ -120,7 +144,6 @@ class vid_src_config_window(QDialog):
                 self.listwidget.item(index).setText(v)
             self.vid_srcs[text][index][k] = v
         self.buttonBox.button(QDialogButtonBox.StandardButton.Apply).setEnabled(False)
-    
 
     def exec(self):
         text = self.combobox.currentText()

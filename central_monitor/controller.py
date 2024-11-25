@@ -1,49 +1,57 @@
-from typing import Tuple
 import time
-from queue import Queue as TQueue, Empty
+from ctypes import CDLL, WinDLL, cdll
+from ctypes import create_string_buffer as csb
+from ctypes import windll
+from queue import Empty
+from queue import Queue as TQueue
 from threading import Thread
-from ctypes import (
-    create_string_buffer as csb, cdll, CDLL, windll, WinDLL
-)
+from typing import Tuple
 
 from central_monitor.HCNetSDK import (
-    NET_DVR_PREVIEWINFO,
+    DOWN_LEFT,
+    DOWN_RIGHT,
+    FOCUS_FAR,
+    FOCUS_NEAR,
+    IRIS_CLOSE,
+    IRIS_OPEN,
     NET_DVR_DEVICEINFO_V30,
-    system_get_platform_info,
+    NET_DVR_PREVIEWINFO,
+    PAN_LEFT,
+    PAN_RIGHT,
+    TILT_DOWN,
+    TILT_UP,
+    UP_LEFT,
+    UP_RIGHT,
+    ZOOM_IN,
+    ZOOM_OUT,
     byref,
-    TILT_UP, TILT_DOWN, PAN_LEFT, PAN_RIGHT, 
-    UP_LEFT, UP_RIGHT, DOWN_LEFT, DOWN_RIGHT, 
-    ZOOM_IN, ZOOM_OUT, FOCUS_NEAR, FOCUS_FAR, 
-    IRIS_OPEN, IRIS_CLOSE,
+    system_get_platform_info,
 )
-
 
 __video_sources__ = ["ip-cam", "hikvision", "local-vid"]
 
 
-class Controller():
+class Controller:
     def __init__(self, src_type: str, login_config: dict) -> None:
-        self.normalized_box = [0.5, 0.5, 1.0, 1.0] # xywh
+        self.normalized_box = [0.5, 0.5, 1.0, 1.0]  # xywh
         self.box_bound = (0.2, 1.0)
         self.brightness_factor = 1.0
         self.brightness_bound = (0.5, 1.5)
 
         self._update_freq = 60
         self._change_rate = 0.005
-        
+
         self.login_flag = True
         self.is_running = False
         self.src_type = src_type
-        self.HCsdk : CDLL | WinDLL = None
+        self.HCsdk: CDLL | WinDLL = None
         # self.thread = Thread(target=self._update_box_thread, daemon=True)
         self.login_config = login_config
-
 
     def start_thread(self, local_command_queue: TQueue) -> None:
 
         self._local_command_queue = local_command_queue
         self.switch_vid_src(self.src_type, self.login_config)
-
 
     def switch_vid_src(self, src_type: str, login_config: dict) -> None:
         """
@@ -64,11 +72,10 @@ class Controller():
                 self.thread = Thread(target=self._update_box_thread, daemon=True)
                 self.thread.start()
 
-
     def _init_dll(self, sys_platform: str) -> None:
         """
         initialize necessary library
-        
+
         current lib list:[
             "linux-lib/libhcnetsdk.so",
         ]
@@ -83,7 +90,6 @@ class Controller():
                 self.HCsdk.NET_DVR_Init()
             else:
                 print("Unsupported platform")
-
 
     def _login(self, login_config: dict) -> None:
         """
@@ -105,7 +111,7 @@ class Controller():
                 print(f"Login device fail, error code is: {err}")
                 self.HCsdk.NET_DVR_Cleanup()
                 return
-            
+
             # open preview
             preview_info = NET_DVR_PREVIEWINFO()
             preview_info.hPlayWnd = None
@@ -118,7 +124,6 @@ class Controller():
             # the transmission deley through these API with C++ backend might be faster then implementing by cv2 with python backend
             self.lReadPlayHandle = self.HCsdk.NET_DVR_RealPlay_V40(lUserId, byref(preview_info), None, None)
 
-
     def handle_ctrl(self, op: Tuple[int]) -> None:
         """
         now the func can only execute basic PTZ ctrl commands
@@ -130,10 +135,12 @@ class Controller():
             if self.src_type == "hikvision":
                 ret = self.HCsdk.NET_DVR_PTZControl(self.lReadPlayHandle, op[0], op[1])
                 if ret == 0:
-                    print(("Start " if op[1] == 0 else "Stop ")+f"ptz control fail, error code is: {self.HCsdk.NET_DVR_GetLastError()}")
+                    print(
+                        ("Start " if op[1] == 0 else "Stop ")
+                        + f"ptz control fail, error code is: {self.HCsdk.NET_DVR_GetLastError()}"
+                    )
             else:
                 self._local_command_queue.put(op)
-
 
     def _update_box_thread(self) -> None:
         """
@@ -143,10 +150,16 @@ class Controller():
         def adjust(item_ids, directions):
             for item_id, direction in zip(item_ids, directions):
                 if item_id < 4:
-                    if self.normalized_box[item_id] < self.box_bound[1] and self.normalized_box[item_id] > self.box_bound[0]:
+                    if (
+                        self.normalized_box[item_id] < self.box_bound[1]
+                        and self.normalized_box[item_id] > self.box_bound[0]
+                    ):
                         self.normalized_box[item_id] += self._change_rate * direction
                 else:
-                    if self.brightness_factor < self.brightness_bound[1] and self.brightness_factor > self.brightness_bound[0]:
+                    if (
+                        self.brightness_factor < self.brightness_bound[1]
+                        and self.brightness_factor > self.brightness_bound[0]
+                    ):
                         self.brightness_factor += self._change_rate * direction
 
         command_dicts = {
@@ -173,9 +186,8 @@ class Controller():
             while True:
                 # when mouse up, the command end
                 try:
-                    _ = self._local_command_queue.get(timeout=1/self._update_freq)
+                    _ = self._local_command_queue.get(timeout=1 / self._update_freq)
                     break
                 except Empty:
                     if op[0] != FOCUS_FAR and op[0] != FOCUS_NEAR:
                         adjust(*command_dicts[op[0]])
-

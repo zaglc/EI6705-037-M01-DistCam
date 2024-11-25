@@ -1,21 +1,28 @@
-import sys, time, os, json, datetime
+import datetime
+import json
+import os
+import sys
 from functools import partial
-from PyQt6.QtWidgets import (
-    QStatusBar, QScrollArea, QVBoxLayout, QMainWindow, QWidget, QSizePolicy
-)
 from typing import List
-from PyQt6.QtGui import QAction
-from PyQt6.QtCore import Qt
 
-from Qt_ui.view_panel.display import Ui_MainWindow as dis_win
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QAction
+from PyQt6.QtWidgets import (
+    QMainWindow,
+    QScrollArea,
+    QSizePolicy,
+    QStatusBar,
+    QVBoxLayout,
+    QWidget,
+)
+
+from Qt_ui.childwins.save_prefer import childWindow
 from Qt_ui.ctrl_panel.ctrl_panel import ctrl_panel
 from Qt_ui.data_panel.data_table import Realtime_Datatab
 from Qt_ui.terminal_panel.output_log import terminal
-from Qt_ui.childwins.save_prefer import childWindow
+from Qt_ui.utils import RS_RUNNING, RS_STOP, RS_WAITING
+from Qt_ui.view_panel.display import Ui_MainWindow as dis_win
 
-from Qt_ui.utils import (
-    RS_WAITING, RS_RUNNING, RS_STOP
-)
 
 class custom_window(QMainWindow):
     """
@@ -38,17 +45,17 @@ class custom_window(QMainWindow):
         self.setCentralWidget(ctw)
         self.model_status = RS_WAITING
         self.num_cam = gpc["num_cam"]
-        
+
         # only for start and stop model process
         self.data_queues = gpc["data_queues"]
         # final image to be shown in view panel
         self.frame_write_queues = gpc["frame_write_queues"]
         # video command and ctrl command, maintained by custom_window
         self.command_queues = gpc["command_queues"]
-        
+
         self.pool = gpc["pool"]
         self.streaming = False
-        self.curtime = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        self.curtime = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
         # initializing other content
         self.resolution: List[list] = []
@@ -57,7 +64,7 @@ class custom_window(QMainWindow):
 
         # initializing view panel
         self.dis = dis_win(
-            parent=self, 
+            parent=self,
             num_cam=self.num_cam,
             frame_queues=self.frame_write_queues,
             command_queues=self.command_queues,
@@ -71,7 +78,7 @@ class custom_window(QMainWindow):
 
         # initializing ctrl panel
         self.ctrl_panel = ctrl_panel(
-            parent=self, 
+            parent=self,
             num_cam=self.num_cam,
         )
         self.ctrl_panel.setupUi(self)
@@ -99,7 +106,6 @@ class custom_window(QMainWindow):
         self._init_meunbar()
         # self.terminal_panel.redirect_stdout_slot("")
 
-
     def _init_meunbar(self):
         self.setStatusBar(QStatusBar(self))
 
@@ -113,7 +119,7 @@ class custom_window(QMainWindow):
         exit_act.setStatusTip("Close the window...")
         exit_act.triggered.connect(self.close)
         exit_act.setShortcut("ctrl+q")
-        
+
         self.menubar = self.menuBar()
         file_menu = self.menubar.addMenu("File(&F)")
         file_menu.addAction(start_stop_act)
@@ -175,7 +181,6 @@ class custom_window(QMainWindow):
         setting_menu.addSeparator()
         setting_menu.addAction(save_preference_act)
 
-
     def start_stop_slot(self):
         """
         slot function for start/stop displaying
@@ -187,7 +192,6 @@ class custom_window(QMainWindow):
             win.frame_thread.switch_cam_lock.unlock()
         self.start_stop_action.setText("Start" if self.streaming else "Stop")
         self.streaming = not self.streaming
-
 
     def ctrl_select_btn_slot(self, info: tuple):
         """
@@ -206,17 +210,15 @@ class custom_window(QMainWindow):
         else:
             self.ctrl_panel.set_selected_cam(-1)
 
-
     def update_realtime_tab_slot(self, info: tuple):
         """
         slot function for updating data panel
         """
 
-        id ,interval, drop, display_flag = info
+        id, interval, drop, display_flag = info
         self.data_panel._compute_slide_exp_average((interval, drop), id)
         if display_flag:
             self.data_panel._updateTabItem(id)
-
 
     def camera_ctrl_signal_slot(self, cam_num: int, cmd: int, on_off: int):
         """
@@ -228,16 +230,15 @@ class custom_window(QMainWindow):
         win.frame_thread.ctrl_info = (cmd, on_off)
         win.frame_thread.switch_cam_lock.unlock()
 
-
     def camera_capture_btn_slot(self):
         """
         slot function for clicking capture button
         setting img saving path
         """
 
-        if all([not win.is_selected_cap for win in self.dis.videoWin]): 
+        if all([not win.is_selected_cap for win in self.dis.videoWin]):
             return
-        
+
         self.ctrl_panel.camera_btn.setEnabled(False)
         self.ctrl_panel.camera_btn.setStyleSheet("ctrl_btn{color:rgb(127,127,127)}")
         self.ctrl_panel.record_btn.setEnabled(False)
@@ -245,15 +246,15 @@ class custom_window(QMainWindow):
 
         for _, win in enumerate(self.dis.videoWin):
             win.capture_btn.setEnabled(False)
-            style = win.capture_btn.styleSheet().replace("0","127")
+            style = win.capture_btn.styleSheet().replace("0", "127")
             win.capture_btn.setStyleSheet(style)
 
         for _, win in enumerate(self.dis.videoWin):
-            if not win.is_selected_cap: continue
+            if not win.is_selected_cap:
+                continue
             win.frame_thread.switch_cam_lock.lock()
             win.frame_thread.camera_active = 1
             win.frame_thread.switch_cam_lock.unlock()
-
 
     def camera_cap2rec_btn_recover_slot(self):
         """
@@ -263,7 +264,7 @@ class custom_window(QMainWindow):
 
         for _, win in enumerate(self.dis.videoWin):
             win.capture_btn.setEnabled(True)
-            style = win.capture_btn.styleSheet().replace("127","0")
+            style = win.capture_btn.styleSheet().replace("127", "0")
             win.capture_btn.setStyleSheet(style)
 
         self.ctrl_panel.camera_btn.setEnabled(True)
@@ -274,13 +275,12 @@ class custom_window(QMainWindow):
         if self.ctrl_panel.is_recording:
             self.ctrl_panel.is_recording = False
 
-
     def camera_record_btn_slot(self):
         """
         slot function for record button
         """
 
-        if all([not win.is_selected_cap for win in self.dis.videoWin]): 
+        if all([not win.is_selected_cap for win in self.dis.videoWin]):
             return
 
         if not self.ctrl_panel.is_recording:
@@ -290,17 +290,17 @@ class custom_window(QMainWindow):
             self.ctrl_panel.record_btn.setStyleSheet("ctrl_btn{color:rgb(255,0,0)}")
             for _, win in enumerate(self.dis.videoWin):
                 win.capture_btn.setEnabled(False)
-                style = win.capture_btn.styleSheet().replace("0","127")
+                style = win.capture_btn.styleSheet().replace("0", "127")
                 win.capture_btn.setStyleSheet(style)
         else:
             self.camera_cap2rec_btn_recover_slot()
 
         for _, win in enumerate(self.dis.videoWin):
-            if not win.is_selected_cap: continue
+            if not win.is_selected_cap:
+                continue
             win.frame_thread.switch_cam_lock.lock()
             win.frame_thread.record_active = 1
             win.frame_thread.switch_cam_lock.unlock()
-
 
     def refresh_active_cam_slot(self):
         """
@@ -313,7 +313,6 @@ class custom_window(QMainWindow):
             win.switch_cam_lock.lock()
             win.frame_thread.need_refresh_cam_flag = True
             win.switch_cam_lock.unlock()
-
 
     def enable_model_infer_slot(self):
         """
@@ -329,7 +328,6 @@ class custom_window(QMainWindow):
             win.frame_thread.model_flag = True
             win.switch_cam_lock.unlock()
 
-
     def save_prefer_set_slot(self):
         img_lst = []
         for win in self.dis.videoWin:
@@ -339,13 +337,12 @@ class custom_window(QMainWindow):
 
         self._config_bak(img_lst)
 
-
-    def _config_bak(self, img_lst = [None]):
+    def _config_bak(self, img_lst=[None]):
         if img_lst[0] is None and os.path.exists("data/temp/box_config.json"):
-            with open("data/temp/box_config.json", 'r') as f:
+            with open("data/temp/box_config.json", "r") as f:
                 dicts = json.load(f)
                 dicts["select_path"] = os.path.join("data", self.curtime)
-            with open("data/temp/box_config.json", 'w') as f:
+            with open("data/temp/box_config.json", "w") as f:
                 json.dump(dicts, f, indent=4)
             return
 
@@ -359,13 +356,12 @@ class custom_window(QMainWindow):
             dicts = dialog.gather_infos()
             if not os.path.exists("data/temp/"):
                 os.makedirs("data/temp/")
-            with open("data/temp/box_config.json", 'r') as f:
+            with open("data/temp/box_config.json", "r") as f:
                 old_dicts = json.load(f)
-            with open("data/temp/box_config.json", 'w') as f:
+            with open("data/temp/box_config.json", "w") as f:
                 old_dicts.update(dicts)
                 json.dump(old_dicts, f, indent=4)
         dialog.destroy()
-
 
     def resizeEvent(self, event):
         """
@@ -376,7 +372,6 @@ class custom_window(QMainWindow):
         cw, ch = self.centralWidget().size().width(), self.centralWidget().size().height()
         self.statusBar().showMessage(f"total:{w}, {h}; central:{cw}, {ch}", 30)
         return super().resizeEvent(event)
-
 
     def closeEvent(self, event):
         """
@@ -400,7 +395,7 @@ class custom_window(QMainWindow):
         for idx, child in enumerate(self.pool):
             child.join()
             print(f"subprocess {idx} quit, pid is {child.pid}")
-        
+
         self.terminal_panel.std_thread.is_running = False
         print("Std Qthread quit")
         sys.stdout = sys.__stdout__
