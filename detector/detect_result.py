@@ -8,7 +8,6 @@ class DetectionResult(BaseModel):
     Pydantic model to store detection results for a single video frame.
     """
 
-
     frame_index: int = Field(..., description="The index of the current frame.")
     names: List[str] = Field(..., description="List of detected class names.")
     cls: List[float] = Field(..., description="List of detected class indices.")

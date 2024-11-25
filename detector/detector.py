@@ -36,7 +36,6 @@ class YOLODetector:
         if frame.shape != (1080, 1920, 3):  # Corrected shape format
             raise ValueError("Input frame must have shape (1080, 1920, 3).")
 
-
         results = self.model.track(frame, persist=True)
         return results[0]
 
@@ -49,7 +48,6 @@ class YOLODetector:
         """
         detection_results = []
         cap = cv2.VideoCapture(video_path)
-
 
         if not cap.isOpened():
             raise FileNotFoundError(f"Cannot open video file: {video_path}")
