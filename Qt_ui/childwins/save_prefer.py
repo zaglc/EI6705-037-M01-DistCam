@@ -1,15 +1,33 @@
-from PyQt6.QtGui import QMoveEvent, QPixmap, QImage, QResizeEvent, QRegularExpressionValidator as QRegExpV
-from PyQt6.QtWidgets import (
-    QApplication, QDialog, QLabel, QGridLayout, 
-    QSpinBox, QWidget, QMainWindow, QLineEdit, QFrame,
-    QFormLayout, QCheckBox, QDialogButtonBox, QHBoxLayout,
-    QPushButton, QSizePolicy, QFileDialog,
-)
-from PyQt6.QtCore import Qt, QSize, QRect, QPoint, QRegularExpression as QRE
-import sys, os
-from typing import List
-from functools import partial
 import json
+import os
+import sys
+from functools import partial
+from typing import List
+
+from PyQt6.QtCore import QPoint, QRect
+from PyQt6.QtCore import QRegularExpression as QRE
+from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtGui import QImage, QMoveEvent, QPixmap
+from PyQt6.QtGui import QRegularExpressionValidator as QRegExpV
+from PyQt6.QtGui import QResizeEvent
+from PyQt6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QFormLayout,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QPushButton,
+    QSizePolicy,
+    QSpinBox,
+    QWidget,
+)
 
 
 class preview_win(QLabel):
@@ -27,13 +45,12 @@ class preview_win(QLabel):
         self.setScaledContents(True)
         self.setStyleSheet("QLabel{border-style: solid;border-width: 2px;border-color: rgba(0, 0, 0, 150)}")
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        
+
         self.cropbox = QLabel(parent)
         self.cbox_size = [0, 0]
         self.cbox_delta = [0, 0]
         self.full_size = [self.width(), self.height()]
         self.cropbox.setStyleSheet("QLabel{border-style: solid;border-width: 1px;border-color: rgba(240, 45, 32, 150)}")
-    
 
     def _update_cbox(self, new_val: dict):
         """
@@ -41,14 +58,13 @@ class preview_win(QLabel):
         """
 
         fbox = self.geometry()
-        self.full_size = [new_val["res_w"] ,new_val["res_h"]]
-        r = [self.width()/new_val["res_w"], self.height()/new_val["res_h"]]
-        self.cbox_delta = [new_val["cp_x"]*r[0], new_val["cp_y"]*r[1]]
-        st_point = QPoint(int(fbox.left()+self.cbox_delta[0]), int(fbox.top()+self.cbox_delta[1]))
+        self.full_size = [new_val["res_w"], new_val["res_h"]]
+        r = [self.width() / new_val["res_w"], self.height() / new_val["res_h"]]
+        self.cbox_delta = [new_val["cp_x"] * r[0], new_val["cp_y"] * r[1]]
+        st_point = QPoint(int(fbox.left() + self.cbox_delta[0]), int(fbox.top() + self.cbox_delta[1]))
         self.cbox_size = [new_val["cp_w"], new_val["cp_h"]]
-        ed_point = QPoint(int(st_point.x()+new_val["cp_w"]*r[0]), int(st_point.y()+new_val["cp_h"]*r[1]))
+        ed_point = QPoint(int(st_point.x() + new_val["cp_w"] * r[0]), int(st_point.y() + new_val["cp_h"] * r[1]))
         self.cropbox.setGeometry(QRect(st_point, ed_point))
-    
 
     def moveEvent(self, event: QMoveEvent) -> None:
         """
@@ -56,10 +72,9 @@ class preview_win(QLabel):
         """
 
         fbox = self.geometry()
-        ed_point = QPoint(int(fbox.left()+self.cbox_delta[0]), int(fbox.top()+self.cbox_delta[1]))
+        ed_point = QPoint(int(fbox.left() + self.cbox_delta[0]), int(fbox.top() + self.cbox_delta[1]))
         self.cropbox.move(ed_point)
         return super().moveEvent(event)
-    
 
     def resizeEvent(self, a0: QResizeEvent) -> None:
         """
@@ -67,9 +82,9 @@ class preview_win(QLabel):
         """
 
         fbox = self.geometry()
-        ed_point = QPoint(int(fbox.left()+self.cbox_delta[0]), int(fbox.top()+self.cbox_delta[1]))
-        n_r = [self.width()/self.full_size[0], self.height()/self.full_size[1]]
-        w, h = n_r[0]*self.cbox_size[0], n_r[1]*self.cbox_size[1]
+        ed_point = QPoint(int(fbox.left() + self.cbox_delta[0]), int(fbox.top() + self.cbox_delta[1]))
+        n_r = [self.width() / self.full_size[0], self.height() / self.full_size[1]]
+        w, h = n_r[0] * self.cbox_size[0], n_r[1] * self.cbox_size[1]
         self.cropbox.setGeometry(QRect(ed_point.x(), ed_point.y(), int(w), int(h)))
         return super().resizeEvent(a0)
 
@@ -86,7 +101,7 @@ class ResCropWidget(QFrame):
         self.step = 8
         self.chan_id = reso[2]
         self.reso = reso[:2]
-        
+
         self.lab = QPushButton(self)
         self.lab.setText(f"Camera{idx}")
         self.lab.clicked.connect(partial(func, idx))
@@ -107,13 +122,19 @@ class ResCropWidget(QFrame):
         outer1 = QWidget(self)
         outer1.setLayout(flayout1)
 
-        self.cp_x = QSpinBox(self);self.cp_x.setMaximum(reso[0])
-        self.cp_y = QSpinBox(self);self.cp_y.setMaximum(reso[1])
-        self.cp_w = QSpinBox(self);self.cp_w.setMaximum(reso[0])
-        self.cp_h = QSpinBox(self);self.cp_h.setMaximum(reso[1])
-        self.cp_w.setValue(512);self.cp_x.setValue(0)
-        self.cp_h.setValue(512);self.cp_y.setValue(0)
-        
+        self.cp_x = QSpinBox(self)
+        self.cp_x.setMaximum(reso[0])
+        self.cp_y = QSpinBox(self)
+        self.cp_y.setMaximum(reso[1])
+        self.cp_w = QSpinBox(self)
+        self.cp_w.setMaximum(reso[0])
+        self.cp_h = QSpinBox(self)
+        self.cp_h.setMaximum(reso[1])
+        self.cp_w.setValue(512)
+        self.cp_x.setValue(0)
+        self.cp_h.setValue(512)
+        self.cp_y.setValue(0)
+
         flayout2 = QFormLayout()
         flayout2.addRow("box-x:", self.cp_x)
         flayout2.addRow("box-y:", self.cp_y)
@@ -132,7 +153,6 @@ class ResCropWidget(QFrame):
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
-
     def _init_boxSignal(self, func):
         """
         funtion for associating slot
@@ -144,16 +164,16 @@ class ResCropWidget(QFrame):
                 if type == "cp_w":
                     x, w = self.cp_x.value(), self.cp_w.value()
                     if x + w > self.reso[0]:
-                        self.cp_x.setValue(self.reso[0]-w)
+                        self.cp_x.setValue(self.reso[0] - w)
                         flag = 1
-                    self.cp_x.setMaximum(self.reso[0]-w)
+                    self.cp_x.setMaximum(self.reso[0] - w)
                 elif type == "cp_h":
                     y, h = self.cp_y.value(), self.cp_h.value()
                     if y + h > self.reso[1]:
-                        self.cp_y.setValue(self.reso[1]-h)
+                        self.cp_y.setValue(self.reso[1] - h)
                         flag = 1
-                    self.cp_y.setMaximum(self.reso[1]-h)
-                
+                    self.cp_y.setMaximum(self.reso[1] - h)
+
                 if not flag:
                     func2()
 
@@ -165,22 +185,22 @@ class ResCropWidget(QFrame):
             getattr(self, att).valueChanged.connect(range_check(att, func2))
             getattr(self, att).setSingleStep(self.step)
 
-
     def gather_infos(self):
         """
         get information of each child widget
         """
 
-        return dict({
-            "class_id": self.class_id.text(),
-            "res_w": int(self.res_w.text()),
-            "res_h": int(self.res_h.text()),
-            "cp_x": int(self.cp_x.text()),
-            "cp_y": int(self.cp_y.text()),
-            "cp_w": int(self.cp_w.text()),
-            "cp_h": int(self.cp_h.text()),
-        })
-    
+        return dict(
+            {
+                "class_id": self.class_id.text(),
+                "res_w": int(self.res_w.text()),
+                "res_h": int(self.res_h.text()),
+                "cp_x": int(self.cp_x.text()),
+                "cp_y": int(self.cp_y.text()),
+                "cp_w": int(self.cp_w.text()),
+                "cp_h": int(self.cp_h.text()),
+            }
+        )
 
     def load_config(self, dicts):
         """
@@ -196,10 +216,12 @@ class ResCropWidget(QFrame):
 class childWindow(QDialog):
     """
     child dialog of QMainwindow
-    set saving preference    
+    set saving preference
     """
 
-    def __init__(self, parent: QMainWindow | None, num_cam: int, reso: list, img_lst: list, box_config: str, cur_time: str = ""):
+    def __init__(
+        self, parent: QMainWindow | None, num_cam: int, reso: list, img_lst: list, box_config: str, cur_time: str = ""
+    ):
         super().__init__(parent=parent)
         self.camera_btn_defalut_path = os.getcwd() + "/data"
         self.preview_id = 0
@@ -208,7 +230,10 @@ class childWindow(QDialog):
         if isinstance(img_lst[0], str):
             self.img_lst = [QPixmap.fromImage(QImage(f)) for f in img_lst]
         elif isinstance(img_lst[0], bytes):
-            self.img_lst = [QPixmap.fromImage(QImage(img, img.shape[0], img.shape[1], QImage.Format.Format_BGR888)) for img in img_lst]
+            self.img_lst = [
+                QPixmap.fromImage(QImage(img, img.shape[0], img.shape[1], QImage.Format.Format_BGR888))
+                for img in img_lst
+            ]
         elif isinstance(img_lst[0], QImage):
             self.img_lst = [QPixmap.fromImage(i) for i in img_lst]
         else:
@@ -218,7 +243,7 @@ class childWindow(QDialog):
         self.setWindowTitle("Saving Preference Setting")
         self.rcw_lst: List[ResCropWidget] = []
         grid = QGridLayout()
-        
+
         inner = QWidget(self)
         hbox0 = QHBoxLayout()
         self.pathline = QLineEdit(self)
@@ -238,8 +263,10 @@ class childWindow(QDialog):
         grid.addWidget(outer0, 0, 0, 1, 3)
 
         hbox = QHBoxLayout()
-        ckb1 = QCheckBox("Adjustment sync.", self);ckb1.setCheckable(False)
-        ckb2 = QCheckBox("Lock w-h ratio", self);ckb2.setCheckable(False)
+        ckb1 = QCheckBox("Adjustment sync.", self)
+        ckb1.setCheckable(False)
+        ckb2 = QCheckBox("Lock w-h ratio", self)
+        ckb2.setCheckable(False)
         ckb3 = QCheckBox("Apply crop box", self)
         self.ckb3 = ckb3
 
@@ -250,8 +277,12 @@ class childWindow(QDialog):
         outer1.setLayout(hbox)
         outer1.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         grid.addWidget(outer1, 1, 0, 1, 3)
-        maxi = (num_cam+2)//3
-        pos = [(i+2, j) for i in range((num_cam+2)//3) for j in range(3 if i+1!=maxi else num_cam%3+(num_cam%3==0)*3)]
+        maxi = (num_cam + 2) // 3
+        pos = [
+            (i + 2, j)
+            for i in range((num_cam + 2) // 3)
+            for j in range(3 if i + 1 != maxi else num_cam % 3 + (num_cam % 3 == 0) * 3)
+        ]
         for idx, (p, r) in enumerate(zip(pos, reso)):
             child = ResCropWidget(self, idx, r, self.preview_cam_switch_slot)
             self.rcw_lst.append(child)
@@ -259,49 +290,48 @@ class childWindow(QDialog):
             child._init_boxSignal(self.preview_move_slot)
 
         self.preview_window = preview_win(self)
-        grid.addWidget(self.preview_window, pos[-1][0]+1, 0, 1, 3, Qt.AlignmentFlag.AlignCenter)
-        grid.setRowStretch(pos[-1][0]+1, 1)
+        grid.addWidget(self.preview_window, pos[-1][0] + 1, 0, 1, 3, Qt.AlignmentFlag.AlignCenter)
+        grid.setRowStretch(pos[-1][0] + 1, 1)
         self.load_config(box_config)
         if isinstance(self.img_lst[0], QPixmap):
             self.preview_window.setPixmap(self.img_lst[self.preview_id])
 
         buttonBox = QDialogButtonBox(parent=self)
-        buttonBox.setOrientation(Qt.Orientation.Horizontal) # 设置为水平方向
-        buttonBox.setStandardButtons(QDialogButtonBox.StandardButton.Cancel|QDialogButtonBox.StandardButton.Ok)
+        buttonBox.setOrientation(Qt.Orientation.Horizontal)  # 设置为水平方向
+        buttonBox.setStandardButtons(QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Ok)
         buttonBox.accepted.connect(self.accept)
         buttonBox.rejected.connect(self.reject)
-        grid.addWidget(buttonBox, pos[-1][0]+2, 0, 1, 3)
+        grid.addWidget(buttonBox, pos[-1][0] + 2, 0, 1, 3)
 
         self.setLayout(grid)
-
 
     def select_path_btn_slot(self):
         """
         slot func invoke after pushing SEL_PATH button
         """
 
-        folder = QFileDialog.getExistingDirectory(self, 'Choose folder to save', directory=self.camera_btn_defalut_path)
+        folder = QFileDialog.getExistingDirectory(self, "Choose folder to save", directory=self.camera_btn_defalut_path)
         if folder:
             self.pathline.setText(folder)
             self.camera_btn_defalut_path = folder
-
 
     def gather_infos(self):
         """
         gather information of the whole dialog when return
         """
 
-        dicts = dict({
-            "select_path": self.camera_btn_defalut_path+f"/{self.cur_time}",
-            "preview_id": self.preview_id,
-            "apply_cbox": self.ckb3.isChecked(),
-        })
+        dicts = dict(
+            {
+                "select_path": self.camera_btn_defalut_path + f"/{self.cur_time}",
+                "preview_id": self.preview_id,
+                "apply_cbox": self.ckb3.isChecked(),
+            }
+        )
         for idx, child in enumerate(self.rcw_lst):
             sfx = f"_{self.reso[idx][2]}" if self.reso[idx][2] else ""
             dicts.update({f"camera{idx}{sfx}": child.gather_infos()})
 
         return dicts
-
 
     def preview_move_slot(self, idx):
         """
@@ -311,7 +341,6 @@ class childWindow(QDialog):
 
         if idx == self.preview_id:
             self.preview_window._update_cbox(self.rcw_lst[self.preview_id].gather_infos())
-
 
     def preview_cam_switch_slot(self, idx: int):
         """
@@ -323,7 +352,6 @@ class childWindow(QDialog):
             if isinstance(self.img_lst[idx], QPixmap):
                 self.preview_window.setPixmap(self.img_lst[idx])
                 self.preview_window._update_cbox(self.rcw_lst[idx].gather_infos())
-
 
     def load_config(self, file: str):
         """
@@ -346,20 +374,20 @@ class childWindow(QDialog):
 # unit test
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    testwin = childWindow(None, 6, [
-        [1920, 1080, 0],
-        [1920, 1080, 0],
-        [1920, 1080, 0],
-        [2560, 1440, 0],
-        [2688, 1520, 0],
-        [2688, 1520, 0]], [None], "data/temp/box_config.json")# ["doc/figs/"+f for f in sorted(os.listdir("doc/figs"))]
+    testwin = childWindow(
+        None,
+        6,
+        [[1920, 1080, 0], [1920, 1080, 0], [1920, 1080, 0], [2560, 1440, 0], [2688, 1520, 0], [2688, 1520, 0]],
+        [None],
+        "data/temp/box_config.json",
+    )  # ["doc/figs/"+f for f in sorted(os.listdir("doc/figs"))]
     ret = testwin.exec()
     if ret:
         if not os.path.exists("data/temp/"):
             os.makedirs("data/temp/")
-            with open("data/temp/box_config.json", 'r') as f:
+            with open("data/temp/box_config.json", "r") as f:
                 old_dicts = json.load(f)
-            with open("data/temp/box_config.json", 'w') as f:
+            with open("data/temp/box_config.json", "w") as f:
                 old_dicts.update(testwin.gather_infos())
                 json.dump(old_dicts, f, indent=4)
     testwin.destroy()

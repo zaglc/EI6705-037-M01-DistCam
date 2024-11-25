@@ -1,12 +1,11 @@
-from PyQt6.QtWidgets import (
-    QLabel, QPushButton, QGridLayout, QGroupBox, QWidget
-)
-from PyQt6.QtCore import pyqtSignal, Qt, QMutex
-from PyQt6.QtGui import QPixmap, QImage
+import time
 from multiprocessing import Queue
 from queue import Queue as TQueue
-import numpy as np, ctypes
-import time
+
+import numpy as np
+from PyQt6.QtCore import QMutex, Qt, pyqtSignal
+from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtWidgets import QGridLayout, QGroupBox, QLabel, QPushButton, QWidget
 
 from Qt_ui.threads import QThread4VideoDisplay
 
@@ -17,13 +16,15 @@ class frame_win(QWidget):
     """
 
     ctrl_select_btn_signal = pyqtSignal(tuple)
-    def __init__(self,
-                 id: int,
-                 parent: QWidget,
-                 frame_queue: Queue,
-                 command_queue: Queue,
-                 min_size: tuple, 
-                 chan_num: int = 1,
+
+    def __init__(
+        self,
+        id: int,
+        parent: QWidget,
+        frame_queue: Queue,
+        command_queue: Queue,
+        min_size: tuple,
+        chan_num: int = 1,
     ):
         """
         Args:
@@ -52,17 +53,17 @@ class frame_win(QWidget):
         self.is_selected_ctrl = False
         self.switching = False
         self._loc_frame_queue = TQueue()
-        
+
         # save preview fig
         self._lock = QMutex()
-        self._preview_image: QImage|None = None
+        self._preview_image: QImage | None = None
         self.save_freq = [0, 50]
-        
+
         self.frame = QLabel(parent=parent)
         self.frame.setMinimumSize(*min_size)
         self.frame.setScaledContents(True)
         self.frame.setStyleSheet("QLabel{border-style: solid;border-width: 2px;border-color: rgba(0, 0, 0, 150)}")
-        
+
         # button for capture vedio/image
         self.capture_btn = QPushButton(parent=parent)
         self.capture_btn.setText("Select")
@@ -83,7 +84,7 @@ class frame_win(QWidget):
         # button for switching to single view
         self.single_view_btn = QPushButton(parent=parent)
         self.single_view_btn.setText("View")
-        
+
         align = Qt.AlignmentFlag.AlignCenter
         grid = QGridLayout()
         grid.setSpacing(5)
@@ -107,7 +108,6 @@ class frame_win(QWidget):
         self.switch_cam_lock = self.frame_thread.switch_cam_lock
         self.frame_thread.start()
 
-
     def selected_cap_slot(self):
         """
         slot function for select button, for capture and record
@@ -120,8 +120,7 @@ class frame_win(QWidget):
         else:
             self.capture_btn.setStyleSheet("QPushButton{color:rgb(0,0,0)}")
             self.frame.setStyleSheet(self.fm_qss["ctrl"] if self.is_selected_ctrl else self.fm_qss["common"])
-            self.is_selected_cap = False     
-
+            self.is_selected_cap = False
 
     def selected_ctrl_slot(self):
         """
@@ -139,11 +138,10 @@ class frame_win(QWidget):
             self.is_selected_ctrl = False
             self.ctrl_select_btn_signal.emit((self.id, 0))
 
-
     # slot for switch button
     def switch_cam_slot(self):
         """
-        slot function for switch button, 
+        slot function for switch button,
         changing channel between RGB and THER if possible
         """
 
@@ -152,39 +150,33 @@ class frame_win(QWidget):
         self.frame_thread.switch_flag = True
         self.switch_cam_lock.unlock()
 
-
-    def switch_frame_slot(self, frame_config):
+    def switch_frame_slot(self):
         """
         slot function for thread Qsingal to change displaying image
         """
-        
+
         frame: np.ndarray = self._loc_frame_queue.get()
         if len(frame.shape) < 3:
             return
 
-        # TODO: 替换为yolo util
+        time0 = time.time()
         shape = frame.shape
-        box, bright = frame_config
-        x1 = round((box[0] - box[2]/2) * shape[1])
-        y1 = round((box[1] - box[3]/2) * shape[0])
-        x2 = round((box[0] + box[2]/2) * shape[1])
-        y2 = round((box[1] + box[3]/2) * shape[0])
-        frame = frame[y1: y2, x1: x2, :].copy()
-        # frame = np.clip((frame[y1: y2, x1: x2, :].astype(np.float32))*bright, 0, 255).astype(np.uint8)
-        
-        w, h = x2 - x1, y2 - y1
+        w, h = shape[1], shape[0]
         image = QImage(frame, w, h, QImage.Format.Format_BGR888)
+        time2 = time.time()
         self.frame.setPixmap(QPixmap.fromImage(image))
+        time3 = time.time()
+        # if self.save_freq[0] % 10 == 0:
+        #     print(f"{self.id}---resize: {round(1000*(time2 - time0), 3)} ms, set frame: {round(1000*(time3 - time2), 3)} ms")
 
         if self.save_freq[0] == 0:
             self._lock.lock()
             self._preview_image = [image, [w, h]]
             self._lock.unlock()
-        
-        self.save_freq[0] += 1    
+
+        self.save_freq[0] += 1
         if self.save_freq[0] == self.save_freq[1]:
             self.save_freq[0] = 0
-
 
     def recover_switch_cam_slot(self):
         """
@@ -193,14 +185,13 @@ class frame_win(QWidget):
 
         self.switch_cha.setEnabled(True)
 
-
     # TODO: 初始高度比比例更大怎么办
     def resizeEvent(self, event):
         """
         resizeEvent overload
         when size of frame_win changes, auto adjust widget label showing image
         """
-        
+
         # o_w = self.control_btn.width() + self.capture_btn.width() + self.switch_cha.width() + self.single_view_btn.width() + 15
         # o_h = self.frame.height()
         # print(f"{self.groupbox.width()}-{self.groupbox.height()}-{o_w}-{o_h}--{(self.control_btn.width()+5)*4-5}")

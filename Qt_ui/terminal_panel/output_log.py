@@ -1,17 +1,22 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QTextCursor
 from PyQt6.QtWidgets import (
-    QLabel, QTextBrowser, QHeaderView, QVBoxLayout, QTabWidget, 
-    QToolBar, QWidget,
+    QHeaderView,
+    QLabel,
+    QTabWidget,
+    QTextBrowser,
+    QToolBar,
+    QVBoxLayout,
+    QWidget,
 )
 
 from Qt_ui.threads import QThread4stdout
 
 
 class terminal(QToolBar):
-    
-    def __init__(self,
-                 parent: QWidget,
+    def __init__(
+        self,
+        parent: QWidget,
     ):
         super().__init__("terminal", parent)
         self.output_text = QTextBrowser(parent)
@@ -26,7 +31,6 @@ class terminal(QToolBar):
         outer.addTab(self.output_text, "OUTPUT")
         self.addWidget(outer)
 
-    
     def redirect_stdout_slot(self, text: str):
         """
         redirect terminal output to Qt widget

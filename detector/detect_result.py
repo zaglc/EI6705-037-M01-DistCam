@@ -1,10 +1,13 @@
-from pydantic import BaseModel, Field
 from typing import List, Union
+
+from pydantic import BaseModel, Field
+
 
 class DetectionResult(BaseModel):
     """
     Pydantic model to store detection results for a single video frame.
     """
+
     frame_index: int = Field(..., description="The index of the current frame.")
     names: List[str] = Field(..., description="List of detected class names.")
     cls: List[float] = Field(..., description="List of detected class indices.")
@@ -24,11 +27,13 @@ class DetectionResult(BaseModel):
             }
         }
 
+
 # Helper function to create a DetectionResult instance
 def create_detection_result(frame_index: int, results) -> DetectionResult:
     """
     Creates a DetectionResult object from the detection model's output.
-    
+
+
     :param frame_index: The index of the current frame.
     :param results: The detection model's output.
     :return: A DetectionResult instance.
@@ -38,12 +43,5 @@ def create_detection_result(frame_index: int, results) -> DetectionResult:
     conf = results[0].boxes.conf.cpu().tolist()
     boxes = results[0].boxes.xywh.cpu().tolist()
     track_ids = results[0].boxes.id.int().cpu().tolist()
-    
-    return DetectionResult(
-        frame_index=frame_index,
-        names=names,
-        cls=cls,
-        conf=conf,
-        boxes=boxes,
-        track_ids=track_ids
-    )
+
+    return DetectionResult(frame_index=frame_index, names=names, cls=cls, conf=conf, boxes=boxes, track_ids=track_ids)

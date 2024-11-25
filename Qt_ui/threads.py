@@ -1,20 +1,32 @@
-from PyQt6.QtCore import (
-    QThread, pyqtSignal, QObject, QMutex, QWaitCondition, QMutexLocker,
-)
 import time
-import numpy as np
 from multiprocessing import Queue
 from queue import Queue as TQueue
 
-from Qt_ui.utils import (
-    FV_QTHREAD_READY_Q, FV_FRAME_PROC_READY_F, 
-    FV_SWITCH_CHANNEL_Q, FV_PKGLOSS_OCCUR_F, 
-    FV_CAPTURE_IMAGE_Q, FV_RECORD_VIDEO_Q, 
-    FV_FLIP_SIMU_STREAM_Q, FV_FLIP_MODEL_ENABLE_Q,
-    FV_QTHREAD_PAUSE_Q, FV_PTZ_CTRL_Q,
-    FV_STOP, FV_RUNNING
+import numpy as np
+from PyQt6.QtCore import (
+    QMutex,
+    QMutexLocker,
+    QObject,
+    QThread,
+    QWaitCondition,
+    pyqtSignal,
 )
-from Qt_ui.utils import gpc_stream
+
+from Qt_ui.utils import (
+    FV_CAPTURE_IMAGE_Q,
+    FV_FLIP_MODEL_ENABLE_Q,
+    FV_FLIP_SIMU_STREAM_Q,
+    FV_FRAME_PROC_READY_F,
+    FV_PKGLOSS_OCCUR_F,
+    FV_PTZ_CTRL_Q,
+    FV_QTHREAD_PAUSE_Q,
+    FV_QTHREAD_READY_Q,
+    FV_RECORD_VIDEO_Q,
+    FV_RUNNING,
+    FV_STOP,
+    FV_SWITCH_CHANNEL_Q,
+    gpc_stream,
+)
 
 
 class QThread4VideoDisplay(QThread):
@@ -23,19 +35,19 @@ class QThread4VideoDisplay(QThread):
     in charge of sending msg such as capture img, updating frame window
     """
 
-    send_signal = pyqtSignal(tuple)
+    send_signal = pyqtSignal()
     switch_btn_recover_signal = pyqtSignal()
     realtime_tab_singal = pyqtSignal(tuple)
     camera_capture_recover_signal = pyqtSignal()
-    
+
     def __init__(
-            self, 
-            thread_id: int,
-            frame_queue: Queue,
-            command_queue: Queue,
-            loc_frame_queue: TQueue,
-            parent: QObject = None,
-        ) -> None:
+        self,
+        thread_id: int,
+        frame_queue: Queue,
+        command_queue: Queue,
+        loc_frame_queue: TQueue,
+        parent: QObject = None,
+    ) -> None:
         """
         Args: the same as args in `display.py`
         """
@@ -48,14 +60,14 @@ class QThread4VideoDisplay(QThread):
 
         # ctrl info, when no signal received, it is None
         self.ctrl_info = None
-        
+
         # cv2 videocapture has read buffer of size 3
         self.frame_cache_len = 3
-        
+
         # QLock protecting internal, infrequently called variables
         self.switch_cam_lock = QMutex()
         self.Qconds = QWaitCondition()
-        
+
         # internal variable
         self.switch_flag = False
         self.need_refresh_cam_flag = False
@@ -68,7 +80,6 @@ class QThread4VideoDisplay(QThread):
         self.pause_flag = False
         self.is_paused = True
         self.is_running = True
-    
 
     def run(self):
         """
@@ -76,8 +87,8 @@ class QThread4VideoDisplay(QThread):
         """
 
         time0 = time.time()
-        while True:    
-            
+        while True:
+
             # fetch context and destory when necessary
             self.switch_cam_lock.lock()
             # action: simultaneous streaming
@@ -105,13 +116,13 @@ class QThread4VideoDisplay(QThread):
             self.switch_cam_lock.unlock()
 
             # get frame from frame_queue
-            frame, (ret_status, ret_val), cam_config = self.frame_queue.get()
+            frame, (ret_status, ret_val) = self.frame_queue.get()
             drop_flag = ret_status == FV_PKGLOSS_OCCUR_F
-            
+
             # trigger frame window image updating
             if not self.is_paused:
                 self.loc_frame_queue.put(frame)
-                self.send_signal.emit(cam_config)
+                self.send_signal.emit()
                 # if len(frame.shape) == 3:
                 #     self.is_paused = True
 
@@ -132,14 +143,16 @@ class QThread4VideoDisplay(QThread):
             elif cam_f:
                 self.camera_capture_recover_signal.emit()
                 ret_cmd = FV_CAPTURE_IMAGE_Q
-            elif rec_f: 
+            elif rec_f:
                 ret_cmd = FV_RECORD_VIDEO_Q
-                
+
             time4 = time.time()
             # print(time4-time0)
 
             # trigger data table updating
-            self.realtime_tab_singal.emit((self.id, max(time4-time0, 0.02), ret_val if drop_flag else 0, self.display_real_flag == 0))
+            self.realtime_tab_singal.emit(
+                (self.id, max(time4 - time0, 0.02), ret_val if drop_flag else 0, self.display_real_flag == 0)
+            )
             self.display_real_flag = (self.display_real_flag + 1) % 5
             time0 = time4
 
@@ -157,13 +170,12 @@ class QThread4stdout(QThread):
     redirect_signal = pyqtSignal(str)
 
     def __init__(
-            self, 
-            parent: QObject = None,
-        ) -> None:
-        
+        self,
+        parent: QObject = None,
+    ) -> None:
+
         super().__init__(parent)
         self.is_running = True
-
 
     def run(self):
         """
