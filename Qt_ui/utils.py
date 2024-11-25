@@ -58,7 +58,7 @@ def pad_with_fixed_ratio(img: np.ndarray, width: int, height: int, id: int):
     return img_new, img_new.shape[1], img_new.shape[0]
 
 
-def safe_get(queue: Queue | TQueue, name: str, quit_func: Callable = None):
+def safe_get(queue: Queue, name: str, quit_func: Callable = None):
     """
     for blocking queue get, if
     """
