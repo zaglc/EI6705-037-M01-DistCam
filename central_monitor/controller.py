@@ -1,12 +1,9 @@
 import os
-import time
-from ctypes import CDLL, WinDLL, cdll
 from ctypes import create_string_buffer as csb
-from ctypes import windll
 from queue import Empty
 from queue import Queue as TQueue
 from threading import Thread
-from typing import Tuple
+from typing import Callable, Tuple
 
 from central_monitor.HCNetSDK import (
     DOWN_LEFT,
@@ -45,7 +42,7 @@ class Controller:
         self.login_flag = True
         self.is_running = False
         self.src_type = src_type
-        self.HCsdk: CDLL | WinDLL = None
+        self.HCsdk = None
         # self.thread = Thread(target=self._update_box_thread, daemon=True)
         self.login_config = login_config
 
@@ -60,12 +57,12 @@ class Controller:
         """
 
         self.thread = Thread(target=self._update_box_thread, daemon=True)
-        sys_platform = system_get_platform_info()
+        sys_platform, dll_loader = system_get_platform_info()
         self.src_type = src_type
         self.login_config = login_config
         if src_type == "hikvision":
             self.is_running = False
-            self._init_dll(sys_platform)
+            self._init_dll(sys_platform, dll_loader)
             self._login(login_config)
         else:
             if not self.thread.is_alive():
@@ -73,7 +70,7 @@ class Controller:
                 self.thread = Thread(target=self._update_box_thread, daemon=True)
                 self.thread.start()
 
-    def _init_dll(self, sys_platform: str) -> None:
+    def _init_dll(self, sys_platform: str, dll_loader: Callable) -> None:
         """
         initialize necessary library
 
@@ -84,10 +81,10 @@ class Controller:
 
         if self.login_flag:
             if sys_platform == "linux":
-                self.HCsdk = cdll.LoadLibrary(os.path.join("libs", "linux", "libhcnetsdk.so"))
+                self.HCsdk = dll_loader(os.path.join("libs", "linux", "libhcnetsdk.so"))
                 self.HCsdk.NET_DVR_Init()
             elif sys_platform == "windows":
-                self.HCsdk = windll.LoadLibrary(os.path.join("libs", "windows", "HCNetSDK.dll"))
+                self.HCsdk = dll_loader(os.path.join("libs", "windows", "HCNetSDK.dll"))
                 self.HCsdk.NET_DVR_Init()
             else:
                 print("Unsupported platform")
