@@ -160,7 +160,7 @@ class Viewer:
             # read frame
             ret = cam.grab()
             if not ret:
-                print("second")
+                # print("second")
                 cam = cv2.VideoCapture(self.current_url)
                 self.local_cams[name] = cam
                 cam.grab()

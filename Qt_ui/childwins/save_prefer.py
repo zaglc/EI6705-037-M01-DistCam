@@ -95,12 +95,12 @@ class ResCropWidget(QFrame):
     micro panel controlling crop box size and resolution
     """
 
-    def __init__(self, parent: QWidget, idx: int, reso: list, func) -> None:
+    def __init__(self, parent: QWidget, idx: int, reso: list, name: str, func) -> None:
         super().__init__(parent=parent)
         self.idx = idx
         self.step = 8
-        self.chan_id = reso[2]
-        self.reso = reso[:2]
+        self.reso = reso
+        self.name = name
 
         self.lab = QPushButton(self)
         self.lab.setText(f"Camera{idx}")
@@ -220,13 +220,16 @@ class childWindow(QDialog):
     """
 
     def __init__(
-        self, parent: QMainWindow | None, num_cam: int, reso: list, img_lst: list, box_config: str, cur_time: str = ""
+        self, parent: QMainWindow | None, num_cam: int, infos: list, img_lst: list, box_config: str, cur_time: str = ""
     ):
         super().__init__(parent=parent)
         self.camera_btn_defalut_path = os.getcwd() + "/data"
         self.preview_id = 0
         self.cur_time = cur_time
-        self.reso = reso
+        self.reso = infos[0]
+        self.names = infos[1]
+        self.num_cam = num_cam
+
         if isinstance(img_lst[0], str):
             self.img_lst = [QPixmap.fromImage(QImage(f)) for f in img_lst]
         elif isinstance(img_lst[0], bytes):
@@ -283,8 +286,8 @@ class childWindow(QDialog):
             for i in range((num_cam + 2) // 3)
             for j in range(3 if i + 1 != maxi else num_cam % 3 + (num_cam % 3 == 0) * 3)
         ]
-        for idx, (p, r) in enumerate(zip(pos, reso)):
-            child = ResCropWidget(self, idx, r, self.preview_cam_switch_slot)
+        for idx, (p, r, n) in enumerate(zip(pos, self.reso, self.names)):
+            child = ResCropWidget(self, idx, r, n, self.preview_cam_switch_slot)
             self.rcw_lst.append(child)
             grid.addWidget(child, *p)
             child._init_boxSignal(self.preview_move_slot)
@@ -328,8 +331,7 @@ class childWindow(QDialog):
             }
         )
         for idx, child in enumerate(self.rcw_lst):
-            sfx = f"_{self.reso[idx][2]}" if self.reso[idx][2] else ""
-            dicts.update({f"camera{idx}{sfx}": child.gather_infos()})
+            dicts.update({self.names[idx]: child.gather_infos()})
 
         return dicts
 
@@ -361,12 +363,11 @@ class childWindow(QDialog):
         if os.path.exists(file):
             with open(file, "r") as f:
                 dicts = json.load(f)
-            self.preview_id = dicts["preview_id"]
+            self.preview_id = min(self.num_cam - 1, dicts["preview_id"])
             self.ckb3.setChecked(dicts["apply_cbox"])
             for idx, child in enumerate(self.rcw_lst):
-                sfx = f"_{self.reso[idx][2]}" if self.reso[idx][2] else ""
                 try:
-                    child.load_config(dicts[f"camera{idx}{sfx}"])
+                    child.load_config(dicts[self.names[idx]])
                 except KeyError:
                     pass
 
