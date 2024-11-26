@@ -1,4 +1,3 @@
-import ctypes
 import json
 import os
 import sys
@@ -7,6 +6,7 @@ from multiprocessing import Process, Queue
 from queue import Empty
 from queue import Queue as TQueue
 from typing import List
+import argparse
 
 import numpy as np
 import torch
@@ -291,13 +291,17 @@ def initialize(file: str, num_cam: int = 6):
 
 
 if __name__ == "__main__":
-    gpc = initialize("./configs/video_source_pool.json", 1)
+    parser = argparse.ArgumentParser(description="arguments for main process")
+    parser.add_argument("-n", "--num_cam", type=int, default=1, help="number of cameras to be monitored")
+    args = parser.parse_args()
+
+    num_cam = args.num_cam
+    gpc = initialize("./configs/video_source_pool.json", num_cam)
     try:
         app = QApplication(sys.argv)
         MainWindow = custom_window(gpc)
         MainWindow.show()
         ret = app.exec()
-        print(ret)
     except Exception as e:
         print(e)
         MainWindow.close()
