@@ -8,8 +8,14 @@ from ctypes import *
 
 def system_get_platform_info():
     sys_platform = platform.system().lower().strip()
+    if sys_platform == "windows":
+        dll_loader = ctypes.windll.LoadLibrary
+    elif sys_platform == "linux":
+        dll_loader = ctypes.cdll.LoadLibrary
+    else:
+        dll_loader = None
 
-    return sys_platform
+    return sys_platform, dll_loader
 
 
 # 回调函数类型定义
