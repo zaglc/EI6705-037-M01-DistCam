@@ -61,7 +61,7 @@ def model_Main(
     stream._add_item(os.getpid(), f"MODEL {ddp_id}")
 
     # model loading and cuda memory pre-allocating
-    batch = 4
+    batch = 1
     running_status = RS_WAITING
     model, device, classes, colors = initialize_model(local_num_cam)
     for queue in result_queue:
@@ -83,27 +83,29 @@ def model_Main(
                 try:
                     (vid_id, running_status, tsr) = data_queue.get(timeout=WAITING_TIME)
                     if running_status == RS_RUNNING:
-                        if tsr is None:
+                        if tsr is not None:
                             tsr_lst.append(tsr)
                             sender_lst.append(vid_id)
                             fetch += 1
                     else:
-                        data_queue.empty()
+                        size = data_queue.qsize()
+                        for _ in range(size):
+                            data_queue.get()
                         break
                 except Empty:
                     break
 
         # no matter which frame submit data, inference will be executed when enough data is collected
         if fetch > 0:
-            chunk_tsr = torch.cat(tsr_lst, dim=0)
+            chunk_tsr = torch.stack(tsr_lst, dim=0)
             chunk_tsr = chunk_tsr.to(device)
             results = model(chunk_tsr, augment=False)[0]
             results = results.clone().detach().cpu()
 
         # dispatch results to corresponding process
         for i in range(fetch):
-            results = non_max_suppression(results, conf_thres=0.3, multi_label=False)
-            result_queue[sender_lst[i]].put((results[i],))
+            results = non_max_suppression(results, conf_thres=0.2, iou_thres=0.4, multi_label=False)
+            result_queue[sender_lst[i]].put((results[i], ))
 
         # process image and execute inference
         # preprocess_img(chunk_tsr, img_lst, img_size, device, active_id)
@@ -136,7 +138,7 @@ def frame_Main(
     local_command_queue = TQueue()
     # TODO: 可以早点开始
     camera.start_thread(frame_read_queue, local_command_queue)
-    frame_write_queue.put((camera.resolution))
+    frame_write_queue.put((camera.resolution, camera.name))
 
     model_run = RS_WAITING
     ret_val_main = FV_FRAME_PROC_READY_F
@@ -151,7 +153,7 @@ def frame_Main(
             data_queue.put((camera.id, model_run, tsr))
             try:
                 (result,) = result_queue.get(WAITING_TIME)
-                frame = process_result(frame, result, colors, classes)
+                frame = process_result(frame, result, classes, colors)
             except Empty:
                 pass
 
@@ -162,6 +164,8 @@ def frame_Main(
             y1 = round((box[1] - box[3] / 2) * shape[0])
             x2 = round((box[0] + box[2] / 2) * shape[1])
             y2 = round((box[1] + box[3] / 2) * shape[0])
+            # if camera.id == 0: 
+                # print(frame.shape, y2-y1, x2-x1)
             frame = frame[y1:y2, x1:x2, :].copy()
         frame_write_queue.put((frame, (ret_val_main, pkg_loss)))
         ret_val_main = FV_FRAME_PROC_READY_F
@@ -188,7 +192,7 @@ def frame_Main(
                 camera.viewer.flip_inter_val("simu_stream")
             elif need_model:
                 model_run = RS_RUNNING if model_run == RS_WAITING else RS_WAITING
-                strr = "enabled" if model_run else "disabled"
+                strr = "enabled" if model_run == RS_RUNNING else "disabled"
                 print(f"model inference {strr}", end=None)
             elif need_capture:  # TODO: viewer自己把图片存好后翻转
                 camera.viewer.flip_inter_val("need_capture")
@@ -287,8 +291,16 @@ def initialize(file: str, num_cam: int = 6):
 
 
 if __name__ == "__main__":
-    gpc = initialize("./configs/video_source_pool.json", 6)
-    app = QApplication(sys.argv)
-    MainWindow = custom_window(gpc)
-    MainWindow.show()
-    sys.exit(app.exec())
+    gpc = initialize("./configs/video_source_pool.json", 1)
+    try:
+        app = QApplication(sys.argv)
+        MainWindow = custom_window(gpc)
+        MainWindow.show()
+        ret = app.exec()
+        print(ret)
+    except Exception as e:
+        print(e)
+        MainWindow.close()
+        ret = 0
+        print("Illegal exit")
+    sys.exit(ret)

@@ -71,3 +71,7 @@ class Camera:
     @property
     def resolution(self):
         return self.viewer.resolution
+    
+    @property
+    def name(self):
+        return self.viewer.src_name

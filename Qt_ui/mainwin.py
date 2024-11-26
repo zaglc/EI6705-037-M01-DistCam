@@ -59,8 +59,11 @@ class custom_window(QMainWindow):
 
         # initializing other content
         self.resolution: List[list] = []
+        self.names: List[str] = []
         for queue in self.frame_write_queues:
-            self.resolution.append(queue.get())
+            reso, n = queue.get()
+            self.resolution.append(reso)
+            self.names.append(n)
 
         # initializing view panel
         self.dis = dis_win(
@@ -346,8 +349,7 @@ class custom_window(QMainWindow):
                 json.dump(dicts, f, indent=4)
             return
 
-        chan_ids = [bag.index(img_lst[i][1]) for i, bag in enumerate(self.resolution)]
-        reso_info = [[*bag[idx], idx] for bag, idx in zip(self.resolution, chan_ids)]
+        reso_info = [self.resolution, self.names]
         img_lst_temp = [img[0] for img in img_lst]
         dialog = childWindow(self, self.num_cam, reso_info, img_lst_temp, "data/temp/box_config.json", self.curtime)
         dialog.preview_move_slot(dialog.preview_id)

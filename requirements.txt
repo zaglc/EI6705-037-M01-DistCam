@@ -1,0 +1,8 @@
+matplotlib==3.9.2
+Pillow==9.4.0
+PyQt6==6.7.1
+opencv-python==4.8.1.78
+scipy==1.11.3
+numpy==1.23.5
+tqdm==4.64.1
+PyYMAL==6.0

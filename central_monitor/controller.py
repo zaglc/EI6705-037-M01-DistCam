@@ -1,4 +1,5 @@
 import time
+import os
 from ctypes import CDLL, WinDLL, cdll
 from ctypes import create_string_buffer as csb
 from ctypes import windll
@@ -38,8 +39,8 @@ class Controller:
         self.brightness_factor = 1.0
         self.brightness_bound = (0.5, 1.5)
 
-        self._update_freq = 60
-        self._change_rate = 0.005
+        self._update_freq = 10
+        self._change_rate = 0.05
 
         self.login_flag = True
         self.is_running = False
@@ -83,10 +84,10 @@ class Controller:
 
         if self.login_flag:
             if sys_platform == "linux":
-                self.HCsdk = cdll.LoadLibrary("linux-lib/libhcnetsdk.so")
+                self.HCsdk = cdll.LoadLibrary(os.path.join("libs", "linux", "libhcnetsdk.so"))
                 self.HCsdk.NET_DVR_Init()
             elif sys_platform == "windows":
-                self.HCsdk = windll.LoadLibrary("win-lib/HCNetSDK.dll")
+                self.HCsdk = windll.LoadLibrary(os.path.join("libs", "windows", "HCNetSDK.dll"))
                 self.HCsdk.NET_DVR_Init()
             else:
                 print("Unsupported platform")
@@ -148,31 +149,42 @@ class Controller:
         """
 
         def adjust(item_ids, directions):
+            adjusted = False
             for item_id, direction in zip(item_ids, directions):
                 if item_id < 4:
                     if (
-                        self.normalized_box[item_id] < self.box_bound[1]
-                        and self.normalized_box[item_id] > self.box_bound[0]
+                        (direction == 1
+                        and self.normalized_box[item_id] < self.box_bound[1])
+                        or (direction == -1
+                        and self.normalized_box[item_id] > self.box_bound[0])
                     ):
                         self.normalized_box[item_id] += self._change_rate * direction
+                        self.normalized_box[item_id] = round(self.normalized_box[item_id], 2)
+                        adjusted = True
                 else:
                     if (
-                        self.brightness_factor < self.brightness_bound[1]
-                        and self.brightness_factor > self.brightness_bound[0]
+                        (direction == 1
+                        and self.brightness_factor < self.brightness_bound[1])
+                        or (direction == -1
+                        and self.brightness_factor > self.brightness_bound[0])
                     ):
                         self.brightness_factor += self._change_rate * direction
+                        self.brightness_factor = round(self.brightness_factor, 2)
+                        adjusted = True
+
+            return adjusted
 
         command_dicts = {
-            TILT_UP: [[1], [1]],
-            TILT_DOWN: [[1], [-1]],
+            TILT_UP: [[1], [-1]],
+            TILT_DOWN: [[1], [1]],
             PAN_LEFT: [[0], [-1]],
             PAN_RIGHT: [[0], [1]],
-            UP_LEFT: [[0, 1], [-1, 1]],
-            UP_RIGHT: [[0, 1], [1, 1]],
-            DOWN_LEFT: [[0, 1], [-1, -1]],
-            DOWN_RIGHT: [[0, 1], [1, -1]],
-            ZOOM_IN: [[2, 3], [1, 1]],
-            ZOOM_OUT: [[2, 3], [-1, -1]],
+            UP_LEFT: [[0, 1], [-1, -1]],
+            UP_RIGHT: [[0, 1], [1, -1]],
+            DOWN_LEFT: [[0, 1], [-1, 1]],
+            DOWN_RIGHT: [[0, 1], [1, 1]],
+            ZOOM_IN: [[2, 3], [-1, -1]],
+            ZOOM_OUT: [[2, 3], [1, 1]],
             IRIS_OPEN: [[4], [1]],
             IRIS_CLOSE: [[4], [-1]],
         }
@@ -190,4 +202,7 @@ class Controller:
                     break
                 except Empty:
                     if op[0] != FOCUS_FAR and op[0] != FOCUS_NEAR:
-                        adjust(*command_dicts[op[0]])
+                        adjusted = adjust(*command_dicts[op[0]])
+                        if not adjusted:
+                            break
+                        print(self.normalized_box)

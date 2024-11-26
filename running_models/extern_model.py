@@ -1,6 +1,7 @@
 import random
 from typing import List
 
+import cv2
 import numpy as np
 import torch
 
@@ -52,6 +53,7 @@ def preprocess_img(ori_img: np.ndarray, img_size: int = IMG_SIZE, device: str = 
     img = np.ascontiguousarray(img)
 
     img = torch.from_numpy(img).to(device)
+    # print(img.shape, torch.cuda.memory_allocated(device) / 1e9)
     img = img.float() / 255.0
 
     return img
