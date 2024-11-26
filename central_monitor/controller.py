@@ -1,5 +1,5 @@
-import time
 import os
+import time
 from ctypes import CDLL, WinDLL, cdll
 from ctypes import create_string_buffer as csb
 from ctypes import windll
@@ -152,21 +152,15 @@ class Controller:
             adjusted = False
             for item_id, direction in zip(item_ids, directions):
                 if item_id < 4:
-                    if (
-                        (direction == 1
-                        and self.normalized_box[item_id] < self.box_bound[1])
-                        or (direction == -1
-                        and self.normalized_box[item_id] > self.box_bound[0])
+                    if (direction == 1 and self.normalized_box[item_id] < self.box_bound[1]) or (
+                        direction == -1 and self.normalized_box[item_id] > self.box_bound[0]
                     ):
                         self.normalized_box[item_id] += self._change_rate * direction
                         self.normalized_box[item_id] = round(self.normalized_box[item_id], 2)
                         adjusted = True
                 else:
-                    if (
-                        (direction == 1
-                        and self.brightness_factor < self.brightness_bound[1])
-                        or (direction == -1
-                        and self.brightness_factor > self.brightness_bound[0])
+                    if (direction == 1 and self.brightness_factor < self.brightness_bound[1]) or (
+                        direction == -1 and self.brightness_factor > self.brightness_bound[0]
                     ):
                         self.brightness_factor += self._change_rate * direction
                         self.brightness_factor = round(self.brightness_factor, 2)

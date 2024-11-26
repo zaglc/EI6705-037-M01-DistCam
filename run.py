@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import sys
@@ -6,7 +7,6 @@ from multiprocessing import Process, Queue
 from queue import Empty
 from queue import Queue as TQueue
 from typing import List
-import argparse
 
 import numpy as np
 import torch
@@ -105,7 +105,7 @@ def model_Main(
         # dispatch results to corresponding process
         for i in range(fetch):
             results = non_max_suppression(results, conf_thres=0.2, iou_thres=0.4, multi_label=False)
-            result_queue[sender_lst[i]].put((results[i], ))
+            result_queue[sender_lst[i]].put((results[i],))
 
         # process image and execute inference
         # preprocess_img(chunk_tsr, img_lst, img_size, device, active_id)
@@ -164,8 +164,8 @@ def frame_Main(
             y1 = round((box[1] - box[3] / 2) * shape[0])
             x2 = round((box[0] + box[2] / 2) * shape[1])
             y2 = round((box[1] + box[3] / 2) * shape[0])
-            # if camera.id == 0: 
-                # print(frame.shape, y2-y1, x2-x1)
+            # if camera.id == 0:
+            # print(frame.shape, y2-y1, x2-x1)
             frame = frame[y1:y2, x1:x2, :].copy()
         frame_write_queue.put((frame, (ret_val_main, pkg_loss)))
         ret_val_main = FV_FRAME_PROC_READY_F
