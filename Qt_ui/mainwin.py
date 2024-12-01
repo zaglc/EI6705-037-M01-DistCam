@@ -45,6 +45,7 @@ class custom_window(QMainWindow):
         self.setCentralWidget(ctw)
         self.model_status = RS_WAITING
         self.num_cam = gpc["num_cam"]
+        self.model_type = gpc["model_type"] # TODO: can dynamic change by front-end
 
         # only for start and stop model process
         self.data_queues = gpc["data_queues"]

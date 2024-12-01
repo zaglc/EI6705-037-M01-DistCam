@@ -35,9 +35,9 @@ from Qt_ui.utils import (
 )
 from running_models.extern_model import (
     initialize_model,
-    non_max_suppression,
     preprocess_img,
     process_result,
+    YOLOV3_DETECT,
 )
 
 WAITING_TIME = 0.01
@@ -46,6 +46,7 @@ WAITING_TIME = 0.01
 def model_Main(
     local_num_cam: int,
     ddp_id: int,
+    model_type: str,
     data_queue: Queue,
     result_queue: List[Queue],
     stream: Stream,
@@ -63,7 +64,7 @@ def model_Main(
     # model loading and cuda memory pre-allocating
     batch = 1
     running_status = RS_WAITING
-    model, device, classes, colors = initialize_model(local_num_cam)
+    model, device, classes, colors = initialize_model(local_num_cam, model_type)
     for queue in result_queue:
         queue.put((classes, colors))
 
@@ -99,12 +100,10 @@ def model_Main(
         if fetch > 0:
             chunk_tsr = torch.stack(tsr_lst, dim=0)
             chunk_tsr = chunk_tsr.to(device)
-            results = model(chunk_tsr, augment=False)[0]
-            results = results.clone().detach().cpu()
+            results = model(chunk_tsr, augment=False)
 
         # dispatch results to corresponding process
         for i in range(fetch):
-            results = non_max_suppression(results, conf_thres=0.2, iou_thres=0.4, multi_label=False)
             result_queue[sender_lst[i]].put((results[i],))
 
         # process image and execute inference
@@ -136,7 +135,6 @@ def frame_Main(
 
     frame_read_queue = TQueue()
     local_command_queue = TQueue()
-    # TODO: 可以早点开始
     camera.start_thread(frame_read_queue, local_command_queue)
     frame_write_queue.put((camera.resolution, camera.name))
 
@@ -215,7 +213,7 @@ def frame_Main(
     sys.stdout = sys.__stdout__
 
 
-def initialize(file: str, num_cam: int = 6):
+def initialize(file: str, num_cam: int = 6, model_type: str = YOLOV3_DETECT):
     """
     initial all things from config file
     """
@@ -253,6 +251,7 @@ def initialize(file: str, num_cam: int = 6):
                 args=(
                     length,
                     ddp_idx,
+                    model_type,
                     data_queues[ddp_idx],
                     result_queues[ddp_idx * length : (ddp_idx + 1) * length],
                     gpc_stream,
@@ -285,6 +284,7 @@ def initialize(file: str, num_cam: int = 6):
         "frame_write_queues": frame_write_queues,
         "command_queues": command_queues,
         "pool": cam_pool,
+        "model_type": model_type,
     }
 
     return ret
@@ -293,10 +293,12 @@ def initialize(file: str, num_cam: int = 6):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="arguments for main process")
     parser.add_argument("-n", "--num_cam", type=int, default=1, help="number of cameras to be monitored")
+    parser.add_argument("-m", "--model_type", type=str, default=YOLOV3_DETECT, help="activated model type")
     args = parser.parse_args()
 
     num_cam = args.num_cam
-    gpc = initialize("./configs/video_source_pool.json", num_cam)
+    model_type = args.model_type
+    gpc = initialize("./configs/video_source_pool.json", num_cam, model_type)
     try:
         app = QApplication(sys.argv)
         MainWindow = custom_window(gpc)
