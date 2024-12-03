@@ -33,6 +33,7 @@ from PyQt6.QtWidgets import (
 )
 
 
+# TODO: NICKNAME不改
 class vid_src_config_window(QDialog):
     def __init__(
         self, parent: QMainWindow | None, vid_srcs: dict, current_vid_src: str, index: int, unselected: List[tuple]
