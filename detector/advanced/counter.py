@@ -1,5 +1,7 @@
+import cv2
 import datetime
 import numpy as np
+import random
 from shapely.geometry import Polygon, Point
 from typing import Callable, Dict, List, Tuple
 
@@ -7,18 +9,23 @@ from detector.base.detector import YOLODetector, DetectionResult, create_detecti
 
 
 class ObjectCounter(YOLODetector):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, 
+            classes_of_interest: List[str] = ["person"],
+            log_file: str = "detection_log.txt",
+            *args, 
+            **kwargs
+        ):
         """
         Extends YOLODetector to count objects of interest.
         :param args: Arguments for YOLODetector.
         :param kwargs: Keyword arguments for YOLODetector.
         """
         super().__init__(*args, **kwargs)
-        self.classes_of_interest: List[str] = ["person"]  # Default classes of interest
+        self.classes_of_interest: List[str] = classes_of_interest  # Default classes of interest
         self.cumulative_counts: List[Dict[str, int]] = []  # Cumulative count until each frame
         self.callback: Callable[[Dict[str, int]], None] = None  # Optional callback
         self.restricted_areas: List[Polygon] = []
-        self.log_file: str = "detection_log.txt"
+        self.log_file: str = log_file
 
     def _frame_to_timestamp(self, frame_index: int) -> str:
         """
@@ -105,14 +112,29 @@ class ObjectCounter(YOLODetector):
         self.check_restricted_area(detection_result)
 
 
-    def online_predict(self, frame: np.ndarray) -> None:
+    def online_predict(self, frame: np.ndarray) -> np.ndarray:
         """
         Performs online object detection and updates the count in real-time for each frame.
         :param video_path: Path to the video file.
+        :return: A frame with bounding boxes drawn around detected objects.
         """
         detection_result = create_detection_result(self.frame_index, self._predict_one_frame(frame))
         self.count_objects_in_frame(detection_result)  # Update cumulative count
         self.frame_index += 1
+        for name, conf, *xywh in zip(detection_result.names, detection_result.conf, detection_result.boxes):
+            tl = round(0.002 * (frame.shape[0] + frame.shape[1]) / 2) + 1  # line/font thickness
+            c1 = tuple(map(int, (xywh[0] - xywh[2] / 2, xywh[1] - xywh[3] / 2)))
+            c2 = tuple(map(int, (xywh[0] + xywh[2] / 2, xywh[1] + xywh[3] / 2)))
+            color = color or [random.randint(0, 255) for _ in range(3)]
+            cv2.rectangle(frame, c1, c2, color, thickness=tl, lineType=cv2.LINE_AA)
+            if name and conf > 0.7:
+                tf = max(tl - 1, 1)  # font thickness
+                t_size = cv2.getTextSize(name, 0, fontScale=tl / 3, thickness=tf)[0]
+                c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
+                cv2.rectangle(frame, c1, c2, color, -1, cv2.LINE_AA)  # filled
+                cv2.putText(frame, name, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
+
+        return frame
 
 
     def get_count_in_range(self, start_frame: int, end_frame: int) -> Dict[str, int]:
