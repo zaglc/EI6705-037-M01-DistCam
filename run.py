@@ -295,16 +295,17 @@ if __name__ == "__main__":
     parser.add_argument("-n", "--num_cam", type=int, default=1, help="number of cameras to be monitored")
     args = parser.parse_args()
 
-    num_cam = args.num_cam
-    gpc = initialize("./configs/video_source_pool.json", num_cam)
-    try:
-        app = QApplication(sys.argv)
-        MainWindow = custom_window(gpc)
-        MainWindow.show()
-        ret = app.exec()
-    except Exception as e:
-        print(e)
-        MainWindow.close()
-        ret = 0
-        print("Illegal exit")
-    sys.exit(ret)
+    with torch.no_grad():
+        num_cam = args.num_cam
+        gpc = initialize("./configs/video_source_pool.json", num_cam)
+        try:
+            app = QApplication(sys.argv)
+            MainWindow = custom_window(gpc)
+            MainWindow.show()
+            ret = app.exec()
+        except Exception as e:
+            print(e)
+            MainWindow.close()
+            ret = 0
+            print("Illegal exit")
+        sys.exit(ret)

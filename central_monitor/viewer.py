@@ -154,7 +154,8 @@ class Viewer:
 
             # for local video data, should not read too fast
             current_time = time.time()
-            time.sleep(max(0, 1 / self.fps - current_time + last_fetch_time))
+            if self.fps > 0:
+                time.sleep(max(0, 1 / self.fps - current_time + last_fetch_time))
             last_fetch_time = current_time
 
             # read frame

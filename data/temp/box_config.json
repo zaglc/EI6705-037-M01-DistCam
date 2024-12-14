@@ -1,0 +1,86 @@
+{
+    "select_path": "data/2024-12-14_14-36-05",
+    "preview_id": 1,
+    "apply_cbox": false,
+    "camera0": {
+        "class_id": "B",
+        "res_w": 1920,
+        "res_h": 1080,
+        "cp_x": 1024,
+        "cp_y": 384,
+        "cp_w": 224,
+        "cp_h": 224
+    },
+    "camera1": {
+        "class_id": "B",
+        "res_w": 1920,
+        "res_h": 1080,
+        "cp_x": 1048,
+        "cp_y": 342,
+        "cp_w": 224,
+        "cp_h": 224
+    },
+    "camera2": {
+        "class_id": "B",
+        "res_w": 1920,
+        "res_h": 1080,
+        "cp_x": 656,
+        "cp_y": 408,
+        "cp_w": 224,
+        "cp_h": 224
+    },
+    "camera3": {
+        "class_id": "J",
+        "res_w": 2560,
+        "res_h": 1440,
+        "cp_x": 832,
+        "cp_y": 368,
+        "cp_w": 448,
+        "cp_h": 448
+    },
+    "camera4": {
+        "class_id": "A",
+        "res_w": 2688,
+        "res_h": 1520,
+        "cp_x": 864,
+        "cp_y": 72,
+        "cp_w": 1200,
+        "cp_h": 1200
+    },
+    "camera5": {
+        "class_id": "A",
+        "res_w": 2688,
+        "res_h": 1520,
+        "cp_x": 328,
+        "cp_y": 184,
+        "cp_w": 1920,
+        "cp_h": 880
+    },
+    "camera4_1": {
+        "class_id": "",
+        "res_w": 1280,
+        "res_h": 720,
+        "cp_x": 392,
+        "cp_y": 24,
+        "cp_w": 624,
+        "cp_h": 624
+    },
+    "camera5_1": {
+        "class_id": "",
+        "res_w": 1280,
+        "res_h": 720,
+        "cp_x": 56,
+        "cp_y": 80,
+        "cp_w": 1160,
+        "cp_h": 504
+    },
+    "JH-WY3-001": {
+        "class_id": "",
+        "res_w": 1920,
+        "res_h": 1080,
+        "cp_x": 0,
+        "cp_y": 0,
+        "cp_w": 512,
+        "cp_h": 512
+    }
+}

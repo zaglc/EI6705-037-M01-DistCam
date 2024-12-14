@@ -37,7 +37,12 @@ def initialize_model(
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
         model = Darknet(cfg, img_size)
-        model.load_state_dict(torch.load(weights, map_location=device)["model"])
+        torch_model = torch.load(weights, map_location=device)
+        try:    
+            model.load_state_dict(torch_model["model"])
+        except:
+            print("Warning: failed load model, try again using relaxed mode")
+            model.load_state_dict(torch_model["model"], strict=False)
         model.to(device).eval()
 
         chunk_tsr = torch.zeros((local_num_cam, 3, int(img_size * 9 / 16), img_size)).float().to(device)
