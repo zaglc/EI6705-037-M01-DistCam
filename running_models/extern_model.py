@@ -15,6 +15,7 @@ from running_models.yolov3_utils import (
 from detector.advanced.counter import ObjectCounter
 
 YOLOV3_DETECT = "yolov3-detect"
+YOLOV11_TRACK = "YOLOV11_TRACK"
 IMG_SIZE = 1920
 
 
@@ -33,19 +34,19 @@ class Engine:
 
         return results
 
+
 def initialize_model(
     local_num_cam: int,
-    type: str = YOLOV3_DETECT,
-    weights: str = "./running_models/yolov3/weights/110-0.447.pt",
-    # data_class: str = "./running_models/yolov3/data/coco.names",
-    data_class: str = "./configs/names.txt",
+    type: str = "YOLOV11_TRACK",
+    weights: str = "yolo11n.pt", 
+    data_class: str = "configs/names.txt",
+    log_file: str = "logs/tracking_log.txt",
     seedid: int = 1024,
 ):
-    assert type in [YOLOV3_DETECT]
-
     random.seed(seedid)
     classes = load_classes(data_class)
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(classes))]
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
     if type == YOLOV3_DETECT:
         from running_models.yolov3.models import Darknet
@@ -61,28 +62,15 @@ def initialize_model(
         model(chunk_tsr, augment=False)
         engine = Engine(model, device, type)
 
-    return engine, device, classes, colors
+    elif type == YOLOV11_TRACK:
+        engine = ObjectCounter(
+            device=device,
+            weights=weights,
+            classes_of_interest=classes,
+            log_file=log_file,
+        )
 
-def initialize_model(
-    local_num_cam: int,
-    type: str = "YOLOV11_TRACK",
-    weights: str = "yolo11n.pt", 
-    data_class: str = "configs/names.txt",
-    log_file: str = "logs/tracking_log.txt",
-    seedid: int = 1024,
-):
-    random.seed(seedid)
-    classes = load_classes(data_class)
-    colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(classes))]
-    
-    object_counter = ObjectCounter(
-        device="cuda:0" if torch.cuda.is_available() else "cpu",
-        weights=weights,
-        classes_of_interest=classes,
-        log_file=log_file,
-    )
-    
-    return object_counter, classes, colors
+    return engine, device, classes, colors
 
 def preprocess_img(ori_img: np.ndarray, type: str = YOLOV3_DETECT, img_size: int = IMG_SIZE, device: str = "cuda:0"):
     img = None

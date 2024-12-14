@@ -38,6 +38,7 @@ from running_models.extern_model import (
     preprocess_img,
     process_result,
     YOLOV3_DETECT,
+    YOLOV11_TRACK
 )
 
 WAITING_TIME = 0.01
@@ -47,6 +48,7 @@ def model_Main(
     local_num_cam: int,
     ddp_id: int,
     model_type: str,
+    model_weight: str,
     data_queue: Queue,
     result_queue: List[Queue],
     stream: Stream,
@@ -64,7 +66,7 @@ def model_Main(
     # model loading and cuda memory pre-allocating
     batch = 1
     running_status = RS_WAITING
-    model, classes, colors = initialize_model(local_num_cam, model_type)
+    model, device, classes, colors = initialize_model(local_num_cam, model_type, model_weight)
     for queue in result_queue:
         queue.put((classes, colors))
 
@@ -99,6 +101,7 @@ def model_Main(
         # no matter which frame submit data, inference will be executed when enough data is collected
         if fetch > 0:
             chunk_tsr = torch.stack(tsr_lst, dim=0)
+            chunk_tsr = chunk_tsr.to(device=device)
             results = model(chunk_tsr, augment=False)
 
         # dispatch results to corresponding process
@@ -212,7 +215,7 @@ def frame_Main(
     sys.stdout = sys.__stdout__
 
 
-def initialize(file: str, num_cam: int = 6, model_type: str = YOLOV3_DETECT):
+def initialize(file: str, num_cam: int, model_type: str, model_weight: str):
     """
     initial all things from config file
     """
@@ -251,6 +254,7 @@ def initialize(file: str, num_cam: int = 6, model_type: str = YOLOV3_DETECT):
                     length,
                     ddp_idx,
                     model_type,
+                    model_weight,
                     data_queues[ddp_idx],
                     result_queues[ddp_idx * length : (ddp_idx + 1) * length],
                     gpc_stream,
@@ -292,12 +296,14 @@ def initialize(file: str, num_cam: int = 6, model_type: str = YOLOV3_DETECT):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="arguments for main process")
     parser.add_argument("-n", "--num_cam", type=int, default=1, help="number of cameras to be monitored")
-    parser.add_argument("-m", "--model_type", type=str, default=YOLOV3_DETECT, help="activated model type")
+    parser.add_argument("-m", "--model_type", type=str, default=YOLOV11_TRACK, help="activated model type")
+    parser.add_argument("-w", "--model_weight", type=str, default="yolo11n.pt", help="The weight file of model")
     args = parser.parse_args()
 
-    num_cam = args.num_cam
-    model_type = args.model_type
-    gpc = initialize("./configs/video_source_pool.json", num_cam, model_type)
+    num_cam      = args.num_cam
+    model_type   = args.model_type
+    model_weight = args.model_weight
+    gpc = initialize("./configs/video_source_pool.json", num_cam, model_type, model_weight)
     try:
         app = QApplication(sys.argv)
         MainWindow = custom_window(gpc)
