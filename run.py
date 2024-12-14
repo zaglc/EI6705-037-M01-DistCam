@@ -64,7 +64,7 @@ def model_Main(
     # model loading and cuda memory pre-allocating
     batch = 1
     running_status = RS_WAITING
-    model, device, classes, colors = initialize_model(local_num_cam, model_type)
+    model, classes, colors = initialize_model(local_num_cam, model_type)
     for queue in result_queue:
         queue.put((classes, colors))
 
@@ -99,7 +99,6 @@ def model_Main(
         # no matter which frame submit data, inference will be executed when enough data is collected
         if fetch > 0:
             chunk_tsr = torch.stack(tsr_lst, dim=0)
-            chunk_tsr = chunk_tsr.to(device)
             results = model(chunk_tsr, augment=False)
 
         # dispatch results to corresponding process
