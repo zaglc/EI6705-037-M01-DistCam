@@ -2,7 +2,7 @@ import os
 from ctypes import create_string_buffer as csb
 from queue import Empty
 from queue import Queue as TQueue
-from threading import Thread
+from threading import Thread, current_thread
 from typing import Callable, Tuple
 
 from central_monitor.HCNetSDK import (
@@ -40,7 +40,7 @@ class Controller:
         self._change_rate = 0.05
 
         self.login_flag = True
-        self.is_running = False
+        self.is_running = True
         self.src_type = src_type
         self.HCsdk = None
         # self.thread = Thread(target=self._update_box_thread, daemon=True)
@@ -49,6 +49,8 @@ class Controller:
     def start_thread(self, local_command_queue: TQueue) -> None:
 
         self._local_command_queue = local_command_queue
+        self.thread = Thread(target=self._update_box_thread, daemon=True)
+        self.thread.start()
         self.switch_vid_src(self.src_type, self.login_config)
 
     def switch_vid_src(self, src_type: str, login_config: dict) -> None:
@@ -56,17 +58,15 @@ class Controller:
         switch src_type and login to embedding device if needed
         """
 
-        self.thread = Thread(target=self._update_box_thread, daemon=True)
         sys_platform, dll_loader = system_get_platform_info()
         self.src_type = src_type
         self.login_config = login_config
         if src_type == "hikvision":
-            self.is_running = False
             self._init_dll(sys_platform, dll_loader)
             self._login(login_config)
         else:
             if not self.thread.is_alive():
-                self.is_running = True
+                self.thread.join()
                 self.thread = Thread(target=self._update_box_thread, daemon=True)
                 self.thread.start()
 
@@ -179,6 +179,8 @@ class Controller:
             IRIS_OPEN: [[4], [1]],
             IRIS_CLOSE: [[4], [-1]],
         }
+        thread_name = current_thread().name
+        print(f"{thread_name} launch")
 
         while True:
             op = self._local_command_queue.get()
@@ -196,4 +198,6 @@ class Controller:
                         adjusted = adjust(*command_dicts[op[0]])
                         if not adjusted:
                             break
-                        print(self.normalized_box)
+                        # print(self.normalized_box)
+
+        print(f"{thread_name} normally quit")

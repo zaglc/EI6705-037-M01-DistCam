@@ -5,7 +5,7 @@ import os
 import time
 from multiprocessing import Queue
 from queue import Queue as TQueue
-from threading import Lock, Thread
+from threading import Lock, Thread, current_thread
 from time import gmtime, strftime
 from typing import Dict, List
 
@@ -136,6 +136,9 @@ class Viewer:
         main func for camera read thread
         """
 
+        thread_name = current_thread().name
+        print(f"{thread_name} launched: Frame decode thread {self.id}-{name}")
+
         # TODO：清零
         vid_frame_cnt = 0
         last_fetch_time = time.time()
@@ -146,7 +149,6 @@ class Viewer:
                 need_record = self.need_record
                 need_send = self.need_send
             run_flag = self.is_running
-
             if not run_flag:
                 break
             with self._lock:
@@ -240,7 +242,7 @@ class Viewer:
 
                 self.frame_queue.put((frame if need_send else np.zeros((1, 1)), self.package_loss))
 
-        print(f"Frame decode thread {self.id}-{name} end")
+        print(f"{thread_name} normally quit: Frame decode thread {self.id}-{name}")
 
     def set_saving_prefer(self, src_name=None):
         """
@@ -269,14 +271,14 @@ class Viewer:
 
         # remove all cameras and threads if not simultaneous stream
         if not simu_stream:
-            with self._lock:
-                self.is_running = False
-                for name, cam in self.local_cams.items():
-                    cam.release()
-                    self.threads[name].join()
-                self.local_cams.clear()
-                self.threads.clear()
-                self._url_lst.clear()
+            self.is_running = False
+            for name, cam in self.local_cams.items():
+                self.threads[name].join()
+                cam.release()
+            self.local_cams.clear()
+            self.threads.clear()
+            self._url_lst.clear()
+            self.is_running = True
 
         name, url = self._get_url(login_config)
         if name not in self._url_lst:

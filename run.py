@@ -34,8 +34,9 @@ from Qt_ui.utils import (
     safe_get,
 )
 from running_models.extern_model import (
+    YOLOV3_DETECT,
+    YOLOV11_TRACK,
     initialize_model,
-    non_max_suppression,
     preprocess_img,
     process_result,
 )
@@ -46,6 +47,8 @@ WAITING_TIME = 0.01
 def model_Main(
     local_num_cam: int,
     ddp_id: int,
+    model_type: str,
+    model_weight: str,
     data_queue: Queue,
     result_queue: List[Queue],
     stream: Stream,
@@ -63,7 +66,7 @@ def model_Main(
     # model loading and cuda memory pre-allocating
     batch = 1
     running_status = RS_WAITING
-    model, device, classes, colors = initialize_model(local_num_cam)
+    model, device, classes, colors = initialize_model(local_num_cam, model_type, model_weight)
     for queue in result_queue:
         queue.put((classes, colors))
 
@@ -98,13 +101,11 @@ def model_Main(
         # no matter which frame submit data, inference will be executed when enough data is collected
         if fetch > 0:
             chunk_tsr = torch.stack(tsr_lst, dim=0)
-            chunk_tsr = chunk_tsr.to(device)
-            results = model(chunk_tsr, augment=False)[0]
-            results = results.clone().detach().cpu()
+            chunk_tsr = chunk_tsr.to(device=device)
+            results = model(chunk_tsr, augment=False)
 
         # dispatch results to corresponding process
         for i in range(fetch):
-            results = non_max_suppression(results, conf_thres=0.2, iou_thres=0.4, multi_label=False)
             result_queue[sender_lst[i]].put((results[i],))
 
         # process image and execute inference
@@ -136,7 +137,6 @@ def frame_Main(
 
     frame_read_queue = TQueue()
     local_command_queue = TQueue()
-    # TODO: 可以早点开始
     camera.start_thread(frame_read_queue, local_command_queue)
     frame_write_queue.put((camera.resolution, camera.name))
 
@@ -186,7 +186,6 @@ def frame_Main(
             if need_pause:
                 camera.viewer.flip_inter_val("need_send")
             elif need_switch:
-                # TODO: 挂窗口槽函数
                 camera.switch_vid_src(*cmd_val)
             elif need_refresh:
                 camera.viewer.flip_inter_val("simu_stream")
@@ -215,7 +214,7 @@ def frame_Main(
     sys.stdout = sys.__stdout__
 
 
-def initialize(file: str, num_cam: int = 6):
+def initialize(file: str, num_cam: int, model_type: str, model_weight: str):
     """
     initial all things from config file
     """
@@ -231,6 +230,7 @@ def initialize(file: str, num_cam: int = 6):
     srcs = config["sources"]
     ddp = 1
     camera_lst = [Camera(default[i][0], srcs[default[i][0]][-1], i, num_cam, ddp) for i in range(num_cam)]
+    default = [[d[0], [dicts["NICKNAME"] for dicts in srcs[d[0]]].index(d[1])] for d in default][:num_cam]
 
     assert num_cam % ddp == 0
 
@@ -253,6 +253,8 @@ def initialize(file: str, num_cam: int = 6):
                 args=(
                     length,
                     ddp_idx,
+                    model_type,
+                    model_weight,
                     data_queues[ddp_idx],
                     result_queues[ddp_idx * length : (ddp_idx + 1) * length],
                     gpc_stream,
@@ -285,6 +287,9 @@ def initialize(file: str, num_cam: int = 6):
         "frame_write_queues": frame_write_queues,
         "command_queues": command_queues,
         "pool": cam_pool,
+        "model_type": model_type,
+        "current_chosen_video_source": default,
+        "video_source_info_lst": srcs,
     }
 
     return ret
@@ -293,19 +298,22 @@ def initialize(file: str, num_cam: int = 6):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="arguments for main process")
     parser.add_argument("-n", "--num_cam", type=int, default=1, help="number of cameras to be monitored")
+    parser.add_argument("-m", "--model_type", type=str, default=YOLOV11_TRACK, help="activated model type")
+    parser.add_argument("-w", "--model_weight", type=str, default="yolo11n.pt", help="The weight file of model")
     args = parser.parse_args()
 
-    with torch.no_grad():
-        num_cam = args.num_cam
-        gpc = initialize("./configs/video_source_pool.json", num_cam)
-        try:
-            app = QApplication(sys.argv)
-            MainWindow = custom_window(gpc)
-            MainWindow.show()
-            ret = app.exec()
-        except Exception as e:
-            print(e)
-            MainWindow.close()
-            ret = 0
-            print("Illegal exit")
-        sys.exit(ret)
+    num_cam = args.num_cam
+    model_type = args.model_type
+    model_weight = args.model_weight
+    gpc = initialize("./configs/video_source_pool.json", num_cam, model_type, model_weight)
+    try:
+        app = QApplication(sys.argv)
+        MainWindow = custom_window(gpc)
+        MainWindow.show()
+        ret = app.exec()
+    except Exception as e:
+        print(e)
+        MainWindow.close()
+        ret = 0
+        print("Illegal exit")
+    sys.exit(ret)

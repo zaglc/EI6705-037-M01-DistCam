@@ -45,6 +45,7 @@ class custom_window(QMainWindow):
         self.setCentralWidget(ctw)
         self.model_status = RS_WAITING
         self.num_cam = gpc["num_cam"]
+        self.model_type = gpc["model_type"]  # TODO: can dynamic change by front-end
 
         # only for start and stop model process
         self.data_queues = gpc["data_queues"]
@@ -71,6 +72,9 @@ class custom_window(QMainWindow):
             num_cam=self.num_cam,
             frame_queues=self.frame_write_queues,
             command_queues=self.command_queues,
+            names=self.names,
+            video_source_choice=gpc["current_chosen_video_source"],
+            video_source_info=gpc["video_source_info_lst"],
         )
         for win in self.dis.videoWin:
             win.ctrl_select_btn_signal.connect(self.ctrl_select_btn_slot)
@@ -223,15 +227,16 @@ class custom_window(QMainWindow):
         if display_flag:
             self.data_panel._updateTabItem(id)
 
-    def camera_ctrl_signal_slot(self, cam_num: int, cmd: int, on_off: int):
+    def camera_ctrl_signal_slot(self, selected_cam: int, cmd: int, on_off: int):
         """
         slot function for camera control signal
         """
 
-        win = self.dis.videoWin[cam_num]
-        win.frame_thread.switch_cam_lock.lock()
-        win.frame_thread.ctrl_info = (cmd, on_off)
-        win.frame_thread.switch_cam_lock.unlock()
+        if selected_cam != -1:
+            win = self.dis.videoWin[selected_cam]
+            win.frame_thread.switch_cam_lock.lock()
+            win.frame_thread.ctrl_info = (cmd, on_off)
+            win.frame_thread.switch_cam_lock.unlock()
 
     def camera_capture_btn_slot(self):
         """
@@ -249,8 +254,11 @@ class custom_window(QMainWindow):
 
         for _, win in enumerate(self.dis.videoWin):
             win.capture_btn.setEnabled(False)
+            win.switch_cha.setEnabled(False)
             style = win.capture_btn.styleSheet().replace("0", "127")
             win.capture_btn.setStyleSheet(style)
+            style = win.switch_cha.styleSheet()
+            win.switch_cha.setStyleSheet(style)
 
         for _, win in enumerate(self.dis.videoWin):
             if not win.is_selected_cap:
@@ -267,8 +275,11 @@ class custom_window(QMainWindow):
 
         for _, win in enumerate(self.dis.videoWin):
             win.capture_btn.setEnabled(True)
+            win.switch_cha.setEnabled(True)
             style = win.capture_btn.styleSheet().replace("127", "0")
             win.capture_btn.setStyleSheet(style)
+            style = win.switch_cha.styleSheet()
+            win.switch_cha.setStyleSheet(style)
 
         self.ctrl_panel.camera_btn.setEnabled(True)
         self.ctrl_panel.camera_btn.setStyleSheet("ctrl_btn{color:rgb(0,0,0)}")
@@ -293,8 +304,12 @@ class custom_window(QMainWindow):
             self.ctrl_panel.record_btn.setStyleSheet("ctrl_btn{color:rgb(255,0,0)}")
             for _, win in enumerate(self.dis.videoWin):
                 win.capture_btn.setEnabled(False)
+                win.switch_cha.setEnabled(False)
                 style = win.capture_btn.styleSheet().replace("0", "127")
                 win.capture_btn.setStyleSheet(style)
+                style = win.switch_cha.styleSheet()
+                win.switch_cha.setStyleSheet(style)
+
         else:
             self.camera_cap2rec_btn_recover_slot()
 
@@ -385,7 +400,6 @@ class custom_window(QMainWindow):
 
         for idx, win in enumerate(self.dis.videoWin):
             win.frame_thread.is_running = False
-            print(f"frame Qthread {idx} quit")
         self.terminal_panel.std_thread.is_running = False
 
         # pass quit flag to sub-processes
@@ -396,9 +410,6 @@ class custom_window(QMainWindow):
 
         for idx, child in enumerate(self.pool):
             child.join()
-            print(f"subprocess {idx} quit, pid is {child.pid}")
 
-        self.terminal_panel.std_thread.is_running = False
-        print("Std Qthread quit")
         sys.stdout = sys.__stdout__
         super().closeEvent(event)

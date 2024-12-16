@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import torch
 
-from running_models.yolov3.models import Darknet
+from detector.advanced.counter import ObjectCounter
 from running_models.yolov3_utils import (
     letterbox,
     load_classes,
@@ -14,24 +14,43 @@ from running_models.yolov3_utils import (
     scale_coords,
 )
 
-IMG_SIZE = 512
+YOLOV3_DETECT = "yolov3-detect"
+YOLOV11_TRACK = "YOLOV11_TRACK"
+IMG_SIZE = 1920
 
-# TODO: so many todo...
+
+class Engine:
+    def __init__(self, model, device, type):
+        self.model = model
+        self.device = device
+        self.type = type
+
+    def __call__(self, *args, **kwargs):
+        results = None
+        if self.type == YOLOV3_DETECT:
+            pred = self.model(*args, **kwargs)[0]
+            pred = pred.clone().detach().cpu()
+            results = non_max_suppression(pred, conf_thres=0.2, iou_thres=0.4, multi_label=False)
+
+        return results
+
+
 def initialize_model(
     local_num_cam: int,
-    type: str = "yolov3",
-    weights: str = "./running_models/yolov3/weights/110-0.447.pt",
-    # data_class: str = "./running_models/yolov3/data/coco.names",
-    data_class: str = "./configs/names.txt",
+    type: str = "YOLOV11_TRACK",
+    weights: str = "yolo11n.pt",
+    data_class: str = "configs/names.txt",
+    log_file: str = "logs/tracking_log.txt",
     seedid: int = 1024,
-) -> list:
-    assert type in ["yolov3"]
-
+):
     random.seed(seedid)
     classes = load_classes(data_class)
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(classes))]
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-    if type == "yolov3":
+    if type == YOLOV3_DETECT:
+        from running_models.yolov3.models import Darknet
+
         cfg = "./running_models/yolov3/cfg/yolov3-t.cfg"
         img_size = IMG_SIZE
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -47,33 +66,44 @@ def initialize_model(
 
         chunk_tsr = torch.zeros((local_num_cam, 3, int(img_size * 9 / 16), img_size)).float().to(device)
         model(chunk_tsr, augment=False)
+        engine = Engine(model, device, type)
 
-    return [model, device, classes, colors]
+    elif type == YOLOV11_TRACK:
+        engine = ObjectCounter(
+            device=device,
+            weights=weights,
+            classes_of_interest=classes,
+            log_file=log_file,
+        )
+
+    return engine, device, classes, colors
 
 
-def preprocess_img(ori_img: np.ndarray, img_size: int = IMG_SIZE, device: str = "cuda:0"):
-    # print(ori_img.dtype)
-    img = letterbox(ori_img.copy(), new_shape=(img_size, int(img_size * 9 / 16)))
-    img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to bsx3x416x416
-    img = np.ascontiguousarray(img)
+def preprocess_img(ori_img: np.ndarray, type: str = YOLOV3_DETECT, img_size: int = IMG_SIZE, device: str = "cuda:0"):
+    img = None
+    if type == YOLOV3_DETECT:
+        img = letterbox(ori_img.copy(), new_shape=(img_size, int(img_size * 9 / 16)))
+        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to bsx3x416x416
+        img = np.ascontiguousarray(img)
 
-    img = torch.from_numpy(img).to(device)
-    # print(img.shape, torch.cuda.memory_allocated(device) / 1e9)
-    img = img.float() / 255.0
+        img = torch.from_numpy(img).to(device)
+
+        img = img.float() / 255.0
 
     return img
 
 
-def process_result(ori_img: np.ndarray, det, classes, colors):
+def process_result(ori_img: np.ndarray, det, classes, colors, type: str = YOLOV3_DETECT):
     inf_shape = (int(IMG_SIZE * 9 / 16), IMG_SIZE)
 
     # process detections
-    if det is not None and len(det):
-        # if i == 0: print(f"DETECT: total {len(det)} boxes")
-        det[:, :4] = scale_coords(inf_shape, det[:, :4], ori_img.shape).round()
+    if type == YOLOV3_DETECT:
+        if det is not None and len(det):
+            # if i == 0: print(f"DETECT: total {len(det)} boxes")
+            det[:, :4] = scale_coords(inf_shape, det[:, :4], ori_img.shape).round()
 
-        for *xyxy, conf, cls in reversed(det):
-            label = "%s %.2f" % (classes[int(cls)], conf)
-            plot_one_box(xyxy, ori_img, label=label, color=colors[int(cls)])
+            for *xyxy, conf, cls in reversed(det):
+                label = "%s %.2f" % (classes[int(cls)], conf)
+                plot_one_box(xyxy, ori_img, label=label, color=colors[int(cls)])
 
     return ori_img

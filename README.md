@@ -80,4 +80,4 @@ video source file located at `configs/video_source_pool.json`, the hierarchy of 
 
 ## PREVIEW 
 + v2: ![local](doc/figs/layout/v2.png) 
-+ v3: ![local](doc/figs/layout/v3.png) 
++ v3: ![local](doc/figs/layout/v3.PNG) 

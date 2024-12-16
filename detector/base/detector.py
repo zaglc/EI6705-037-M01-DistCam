@@ -1,8 +1,10 @@
+from typing import List, Union
+
 import cv2
 import numpy as np
 from ultralytics import YOLO
 
-from detector.detect_result import DetectionResult, create_detection_result
+from detector.base.detect_result import DetectionResult, create_detection_result
 
 
 class YOLODetector:
@@ -39,7 +41,7 @@ class YOLODetector:
         results = self.model.track(frame, persist=True)
         return results[0]
 
-    def offline_predict(self, video_path: str):
+    def offline_predict(self, video_path: str) -> List[DetectionResult]:
         """
         Performs offline object detection on a video file.
 
