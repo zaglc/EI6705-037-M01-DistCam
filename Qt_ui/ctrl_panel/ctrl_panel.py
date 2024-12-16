@@ -158,11 +158,9 @@ class ctrl_panel(QToolBar):
 
         if self.if_pressed:
             self.ptz_btn_signal.emit(self.selected_cam, cmd, 1)
-            # print("end emit")
             self.if_pressed = False
         else:
             self.ptz_btn_signal.emit(self.selected_cam, cmd, 0)
-            # print("emit")
             self.if_pressed = True
 
     def camera_btn_slot(self):

@@ -23,8 +23,8 @@ class frame_win(QWidget):
         parent: QWidget,
         frame_queue: Queue,
         command_queue: Queue,
+        name: str,
         min_size: tuple,
-        chan_num: int = 1,
     ):
         """
         Args:
@@ -72,9 +72,6 @@ class frame_win(QWidget):
         # button for switch channel
         self.switch_cha = QPushButton(parent=parent)
         self.switch_cha.setText("Switch")
-        self.switch_cha.clicked.connect(self.switch_cam_slot)
-        if chan_num == 1:
-            self.switch_cha.setEnabled(False)
 
         # button for PTZ control
         self.control_btn = QPushButton(parent=parent)
@@ -94,8 +91,7 @@ class frame_win(QWidget):
         grid.addWidget(self.control_btn, 4, 2)
         grid.addWidget(self.switch_cha, 4, 3)
 
-        posfix = "" if chan_num == 1 else "+THER"
-        self.groupbox = QGroupBox(f"CAM {id+1}: RGB{posfix}", parent=parent)
+        self.groupbox = QGroupBox(name, parent=parent)
         self.groupbox.setLayout(grid)
         self.groupbox.setStyleSheet("QGroupBox{font:30;}")
         grid2 = QGridLayout()
@@ -139,15 +135,20 @@ class frame_win(QWidget):
             self.ctrl_select_btn_signal.emit((self.id, 0))
 
     # slot for switch button
-    def switch_cam_slot(self):
+    def switch_cam_slot(self, source_type, source_info):
         """
         slot function for switch button,
         changing channel between RGB and THER if possible
+
+        Args:
+            source_type (str): local-vid, ip-camera, hikvision
+            source_info (dict): info of source
         """
 
         self.switch_cha.setEnabled(False)
         self.switch_cam_lock.lock()
         self.frame_thread.switch_flag = True
+        self.frame_thread.vid_src_info_tuple = (source_type, source_info)
         self.switch_cam_lock.unlock()
 
     def switch_frame_slot(self):

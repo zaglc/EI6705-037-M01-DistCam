@@ -7,7 +7,6 @@ from typing import List
 from PyQt6.QtCore import QPoint, QRect
 from PyQt6.QtCore import QRegularExpression as QRE
 from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtGui import QImage, QMoveEvent, QPixmap
 from PyQt6.QtGui import QRegularExpressionValidator as QRegExpV
 from PyQt6.QtGui import QResizeEvent
 from PyQt6.QtWidgets import (
@@ -24,7 +23,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QMainWindow,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QSpinBox,
@@ -36,7 +35,7 @@ from PyQt6.QtWidgets import (
 # TODO: NICKNAME不改
 class vid_src_config_window(QDialog):
     def __init__(
-        self, parent: QMainWindow | None, vid_srcs: dict, current_vid_src: str, index: int, unselected: List[tuple]
+        self, parent: QWidget | None, vid_srcs: dict, current_vid_src: str, index: int, src_dir: str, unselected: List[tuple]
     ):
         """
         vid_srcs:{
@@ -54,10 +53,12 @@ class vid_src_config_window(QDialog):
 
         super().__init__(parent=parent)
         self.vid_srcs = vid_srcs
+        self.src_dir = src_dir
         self.setWindowTitle("Video Source Configuration")
 
         # left part
         start_row = list(vid_srcs.keys()).index(current_vid_src)
+        self.name_dicts = {src_type: [vv["NICKNAME"] for vv in v] for src_type, v in vid_srcs.items()} # store current selected name, avoid conflict
         self.mask_pairs = [(list(vid_srcs.keys()).index(src), idx) for (src, idx) in unselected]
         self.combobox = QComboBox(self)
         self.combobox.addItems([k for k in vid_srcs.keys()])
@@ -136,22 +137,55 @@ class vid_src_config_window(QDialog):
         self.buttonBox.button(QDialogButtonBox.StandardButton.Apply).setEnabled(False)
 
     def update_config_slot(self):
+        """
+        update video source configuration after clicking apply button
+        """
+
+        nickname_repeat_flag, file_not_exist_flag = False, False
         text = self.combobox.currentText()
         index = self.listwidget.currentRow()
         for i in range(self.flayout.rowCount()):
             k = self.flayout.itemAt(i, QFormLayout.ItemRole.LabelRole).widget().text()
             v = self.flayout.itemAt(i, QFormLayout.ItemRole.FieldRole).widget().text()
             if k == "NICKNAME":
-                self.listwidget.item(index).setText(v)
-            self.vid_srcs[text][index][k] = v
-        self.buttonBox.button(QDialogButtonBox.StandardButton.Apply).setEnabled(False)
+                if v in self.name_dicts[text] and v != self.vid_srcs[text][index][k]:
+                    nickname_repeat_flag = True
+                else:
+                    self.listwidget.item(index).setText(v)
+            elif k == "PATH":
+                if not os.path.exists(os.path.join(self.src_dir, v)):
+                    file_not_exist_flag = True
+
+            if not nickname_repeat_flag and not file_not_exist_flag:
+                self.vid_srcs[text][index][k] = v
+        if nickname_repeat_flag:
+            QMessageBox.warning(self, "Warning", "The nickname already exists.")
+        elif file_not_exist_flag:
+            QMessageBox.warning(self, "Warning", "The video file does not exist.")
+        else:
+            self.buttonBox.button(QDialogButtonBox.StandardButton.Apply).setEnabled(False)
+
+        return nickname_repeat_flag or file_not_exist_flag
+
+    def accept(self):
+        """
+        slot when click ok button
+        """
+    
+        flag = self.update_config_slot()
+        if not flag:
+            ret = super().accept()
+        else:
+            ret = None
+
+        return ret
 
     def exec(self):
+
+        ret = QDialog.exec(self)
         text = self.combobox.currentText()
         index = self.listwidget.currentRow()
-        ret = QDialog.exec(self)
-
-        return ret, text, self.vid_srcs[text][index]["NICKNAME"]
+        return ret, text, index, self.vid_srcs
 
 
 if __name__ == "__main__":
@@ -159,8 +193,8 @@ if __name__ == "__main__":
         vid_srcs = json.load(f)
 
     app = QApplication(sys.argv)
-    window = vid_src_config_window(None, vid_srcs, "local-vid", 1, [("local-vid", 3), ("local-vid", 4)])
+    window = vid_src_config_window(None, vid_srcs["sources"], "local-vid", 1, "data/src", [("local-vid", 3), ("local-vid", 4)])
     ret = window.exec()
-    print(ret)
+    print(ret[:3])
     window.destroy()
     sys.exit(ret[0])

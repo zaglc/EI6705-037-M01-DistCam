@@ -186,7 +186,6 @@ def frame_Main(
             if need_pause:
                 camera.viewer.flip_inter_val("need_send")
             elif need_switch:
-                # TODO: 挂窗口槽函数
                 camera.switch_vid_src(*cmd_val)
             elif need_refresh:
                 camera.viewer.flip_inter_val("simu_stream")
@@ -231,6 +230,7 @@ def initialize(file: str, num_cam: int, model_type: str, model_weight: str):
     srcs = config["sources"]
     ddp = 1
     camera_lst = [Camera(default[i][0], srcs[default[i][0]][-1], i, num_cam, ddp) for i in range(num_cam)]
+    default = [[d[0], [dicts["NICKNAME"] for dicts in srcs[d[0]]].index(d[1])] for d in default][:num_cam]
 
     assert num_cam % ddp == 0
 
@@ -288,6 +288,8 @@ def initialize(file: str, num_cam: int, model_type: str, model_weight: str):
         "command_queues": command_queues,
         "pool": cam_pool,
         "model_type": model_type,
+        "current_chosen_video_source": default,
+        "video_source_info_lst": srcs,
     }
 
     return ret
