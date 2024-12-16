@@ -19,11 +19,10 @@ def system_get_platform_info():
 
 
 # 回调函数类型定义
-try:
+if "linux" in sys.platform:
+    fun_ctype = CFUNCTYPE
+else:
     fun_ctype = WINFUNCTYPE  # 指针函数类型
-except:
-    if "linux" in sys.platform:
-        fun_ctype = CFUNCTYPE
 
 # 云台控制命令
 LIGHT_PWRON = 2  # 接通灯光电源
