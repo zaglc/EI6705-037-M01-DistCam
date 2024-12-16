@@ -1,12 +1,12 @@
 import os
 from functools import partial
 from multiprocessing import Queue
-from typing import List, Dict
+from typing import Dict, List
 
-from PyQt6.QtWidgets import QGridLayout, QMainWindow, QStatusBar, QWidget, QDialog
+from PyQt6.QtWidgets import QDialog, QGridLayout, QMainWindow, QStatusBar, QWidget
 
-from Qt_ui.view_panel.frame_window import frame_win
 from Qt_ui.childwins.vid_src_config import vid_src_config_window
+from Qt_ui.view_panel.frame_window import frame_win
 
 
 class Ui_MainWindow(QWidget):
@@ -141,17 +141,18 @@ class Ui_MainWindow(QWidget):
         """
 
         window = vid_src_config_window(
-            self, self.video_source_info, 
-            self.video_source_choice[id][0], 
-            self.video_source_choice[id][1], 
-            os.path.join("data", "src"), 
-            [t for idx, t in enumerate(self.video_source_choice) if idx != id]
+            self,
+            self.video_source_info,
+            self.video_source_choice[id][0],
+            self.video_source_choice[id][1],
+            os.path.join("data", "src"),
+            [t for idx, t in enumerate(self.video_source_choice) if idx != id],
         )
         ret, source_type, index, source_info = window.exec()
         self.video_source_info = source_info
         if ret == QDialog.DialogCode.Accepted:
-            self.video_source_choice[id] = [source_type, index]    
+            self.video_source_choice[id] = [source_type, index]
             self.videoWin[id].switch_cam_slot(source_type, source_info[source_type][index])
             nickname = source_info[source_type][index]["NICKNAME"]
             self.videoWin[id].groupbox.setTitle(nickname)
-            print(F"Video source of {id} changed to {source_type}: {nickname}")
+            print(f"Video source of {id} changed to {source_type}: {nickname}")

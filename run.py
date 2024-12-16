@@ -34,11 +34,11 @@ from Qt_ui.utils import (
     safe_get,
 )
 from running_models.extern_model import (
+    YOLOV3_DETECT,
+    YOLOV11_TRACK,
     initialize_model,
     preprocess_img,
     process_result,
-    YOLOV3_DETECT,
-    YOLOV11_TRACK
 )
 
 WAITING_TIME = 0.01
@@ -302,8 +302,8 @@ if __name__ == "__main__":
     parser.add_argument("-w", "--model_weight", type=str, default="yolo11n.pt", help="The weight file of model")
     args = parser.parse_args()
 
-    num_cam      = args.num_cam
-    model_type   = args.model_type
+    num_cam = args.num_cam
+    model_type = args.model_type
     model_weight = args.model_weight
     gpc = initialize("./configs/video_source_pool.json", num_cam, model_type, model_weight)
     try:

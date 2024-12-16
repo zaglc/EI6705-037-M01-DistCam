@@ -1,20 +1,22 @@
-import cv2
 import datetime
-import numpy as np
 import random
-from shapely.geometry import Polygon, Point
 from typing import Callable, Dict, List, Tuple
 
-from detector.base.detector import YOLODetector, DetectionResult, create_detection_result
+import cv2
+import numpy as np
+from shapely.geometry import Point, Polygon
+
+from detector.base.detector import (
+    DetectionResult,
+    YOLODetector,
+    create_detection_result,
+)
 
 
 class ObjectCounter(YOLODetector):
-    def __init__(self, 
-            classes_of_interest: List[str] = ["person"],
-            log_file: str = "detection_log.txt",
-            *args, 
-            **kwargs
-        ):
+    def __init__(
+        self, classes_of_interest: List[str] = ["person"], log_file: str = "detection_log.txt", *args, **kwargs
+    ):
         """
         Extends YOLODetector to count objects of interest.
         :param args: Arguments for YOLODetector.
@@ -37,7 +39,7 @@ class ObjectCounter(YOLODetector):
         seconds = frame_index / 24  # 24 FPS
         timestamp = base_time + datetime.timedelta(seconds=seconds)
         return timestamp.strftime("%Y-%m-%d %H:%M:%S")
-    
+
     def log_event(self, frame_index: int, event_type: str, details: str) -> None:
         """
         Logs an event to the log file.
@@ -49,7 +51,7 @@ class ObjectCounter(YOLODetector):
         log_message = f"{timestamp}, {event_type}: {details}\n"
         with open(self.log_file, "a") as log_file:
             log_file.write(log_message)
-    
+
     def alert_callback(frame_index: int):
         print(f"ALERT: Frame {frame_index}, something entered the restricted area.")
 
@@ -80,7 +82,7 @@ class ObjectCounter(YOLODetector):
                 self.log_event(
                     detection_result.frame_index,
                     "Entry",
-                    f"Detected '{name}' (ID: {track_id}) entering restricted area at position ({x:.2f}, {y:.2f})"
+                    f"Detected '{name}' (ID: {track_id}) entering restricted area at position ({x:.2f}, {y:.2f})",
                 )
 
         # Trigger the entry callback if any object entered the restricted area
@@ -98,19 +100,18 @@ class ObjectCounter(YOLODetector):
         Updates the cumulative count of classes of interest for a single frame.
         :param detection_result: DetectionResult object for the frame.
         """
-        current_count = self.cumulative_counts[-1].copy() if self.cumulative_counts else {k: 0 for k in self.classes_of_interest}
+        current_count = (
+            self.cumulative_counts[-1].copy() if self.cumulative_counts else {k: 0 for k in self.classes_of_interest}
+        )
         for box, name in zip(detection_result.boxes, detection_result.names):
             if name in self.classes_of_interest:
                 current_count[name] += 1
                 x, y, w, h = box
                 self.log_event(
-                    detection_result.frame_index,
-                    "Detection",
-                    f"Detected '{name}' at position ({x:.2f}, {y:.2f})"
+                    detection_result.frame_index, "Detection", f"Detected '{name}' at position ({x:.2f}, {y:.2f})"
                 )
         self.cumulative_counts.append(current_count)
         self.check_restricted_area(detection_result)
-
 
     def online_predict(self, frame: np.ndarray) -> np.ndarray:
         """
@@ -132,10 +133,11 @@ class ObjectCounter(YOLODetector):
                 t_size = cv2.getTextSize(name, 0, fontScale=tl / 3, thickness=tf)[0]
                 c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
                 cv2.rectangle(frame, c1, c2, color, -1, cv2.LINE_AA)  # filled
-                cv2.putText(frame, name, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
+                cv2.putText(
+                    frame, name, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA
+                )
 
         return frame
-
 
     def get_count_in_range(self, start_frame: int, end_frame: int) -> Dict[str, int]:
         """
@@ -150,7 +152,9 @@ class ObjectCounter(YOLODetector):
         if start_frame > len(self.cumulative_counts) or end_frame > len(self.cumulative_counts):
             raise IndexError("Frame index out of bounds. Make sure to run online_predict first.")
 
-        start_count = self.cumulative_counts[start_frame - 1] if start_frame > 0 else {k: 0 for k in self.classes_of_interest}
+        start_count = (
+            self.cumulative_counts[start_frame - 1] if start_frame > 0 else {k: 0 for k in self.classes_of_interest}
+        )
         end_count = self.cumulative_counts[end_frame]
         return {k: end_count[k] - start_count.get(k, 0) for k in self.classes_of_interest}
 

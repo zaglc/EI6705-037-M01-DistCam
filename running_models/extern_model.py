@@ -1,9 +1,11 @@
-import cv2
-import numpy as np
 import random
 from typing import List
+
+import cv2
+import numpy as np
 import torch
 
+from detector.advanced.counter import ObjectCounter
 from running_models.yolov3_utils import (
     letterbox,
     load_classes,
@@ -11,8 +13,6 @@ from running_models.yolov3_utils import (
     plot_one_box,
     scale_coords,
 )
-
-from detector.advanced.counter import ObjectCounter
 
 YOLOV3_DETECT = "yolov3-detect"
 YOLOV11_TRACK = "YOLOV11_TRACK"
@@ -38,7 +38,7 @@ class Engine:
 def initialize_model(
     local_num_cam: int,
     type: str = "YOLOV11_TRACK",
-    weights: str = "yolo11n.pt", 
+    weights: str = "yolo11n.pt",
     data_class: str = "configs/names.txt",
     log_file: str = "logs/tracking_log.txt",
     seedid: int = 1024,
@@ -50,6 +50,7 @@ def initialize_model(
 
     if type == YOLOV3_DETECT:
         from running_models.yolov3.models import Darknet
+
         cfg = "./running_models/yolov3/cfg/yolov3-t.cfg"
         img_size = IMG_SIZE
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -72,6 +73,7 @@ def initialize_model(
 
     return engine, device, classes, colors
 
+
 def preprocess_img(ori_img: np.ndarray, type: str = YOLOV3_DETECT, img_size: int = IMG_SIZE, device: str = "cuda:0"):
     img = None
     if type == YOLOV3_DETECT:
@@ -80,7 +82,7 @@ def preprocess_img(ori_img: np.ndarray, type: str = YOLOV3_DETECT, img_size: int
         img = np.ascontiguousarray(img)
 
         img = torch.from_numpy(img).to(device)
-        
+
         img = img.float() / 255.0
 
     return img
@@ -100,4 +102,3 @@ def process_result(ori_img: np.ndarray, det, classes, colors, type: str = YOLOV3
                 plot_one_box(xyxy, ori_img, label=label, color=colors[int(cls)])
 
     return ori_img
-

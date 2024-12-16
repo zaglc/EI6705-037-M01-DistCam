@@ -35,7 +35,13 @@ from PyQt6.QtWidgets import (
 # TODO: NICKNAME不改
 class vid_src_config_window(QDialog):
     def __init__(
-        self, parent: QWidget | None, vid_srcs: dict, current_vid_src: str, index: int, src_dir: str, unselected: List[tuple]
+        self,
+        parent: QWidget | None,
+        vid_srcs: dict,
+        current_vid_src: str,
+        index: int,
+        src_dir: str,
+        unselected: List[tuple],
     ):
         """
         vid_srcs:{
@@ -58,7 +64,9 @@ class vid_src_config_window(QDialog):
 
         # left part
         start_row = list(vid_srcs.keys()).index(current_vid_src)
-        self.name_dicts = {src_type: [vv["NICKNAME"] for vv in v] for src_type, v in vid_srcs.items()} # store current selected name, avoid conflict
+        self.name_dicts = {
+            src_type: [vv["NICKNAME"] for vv in v] for src_type, v in vid_srcs.items()
+        }  # store current selected name, avoid conflict
         self.mask_pairs = [(list(vid_srcs.keys()).index(src), idx) for (src, idx) in unselected]
         self.combobox = QComboBox(self)
         self.combobox.addItems([k for k in vid_srcs.keys()])
@@ -171,7 +179,7 @@ class vid_src_config_window(QDialog):
         """
         slot when click ok button
         """
-    
+
         flag = self.update_config_slot()
         if not flag:
             ret = super().accept()
@@ -193,7 +201,9 @@ if __name__ == "__main__":
         vid_srcs = json.load(f)
 
     app = QApplication(sys.argv)
-    window = vid_src_config_window(None, vid_srcs["sources"], "local-vid", 1, "data/src", [("local-vid", 3), ("local-vid", 4)])
+    window = vid_src_config_window(
+        None, vid_srcs["sources"], "local-vid", 1, "data/src", [("local-vid", 3), ("local-vid", 4)]
+    )
     ret = window.exec()
     print(ret[:3])
     window.destroy()

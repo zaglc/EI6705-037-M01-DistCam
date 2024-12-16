@@ -71,7 +71,7 @@ class QThread4VideoDisplay(QThread):
         # switch camera source
         self.switch_flag = False
         self.vid_src_info_tuple = None
-        
+
         # internal variable
         self.need_refresh_cam_flag = False
         self.model_flag = False
@@ -171,6 +171,7 @@ class QThread4VideoDisplay(QThread):
                 break
         print(f"{self.name} normally quit")
 
+
 class QThread4stdout(QThread):
     """
     QThread for output redirection: from terminal to text widget
@@ -191,7 +192,7 @@ class QThread4stdout(QThread):
         """
         Main loop for QThread4stdout
         """
-        
+
         print(f"{self.name} launched")
         while True:
             text = gpc_stream.log_buffer.get()

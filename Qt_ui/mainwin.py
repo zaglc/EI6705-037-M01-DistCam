@@ -45,7 +45,7 @@ class custom_window(QMainWindow):
         self.setCentralWidget(ctw)
         self.model_status = RS_WAITING
         self.num_cam = gpc["num_cam"]
-        self.model_type = gpc["model_type"] # TODO: can dynamic change by front-end
+        self.model_type = gpc["model_type"]  # TODO: can dynamic change by front-end
 
         # only for start and stop model process
         self.data_queues = gpc["data_queues"]
@@ -280,7 +280,6 @@ class custom_window(QMainWindow):
             win.capture_btn.setStyleSheet(style)
             style = win.switch_cha.styleSheet()
             win.switch_cha.setStyleSheet(style)
-            
 
         self.ctrl_panel.camera_btn.setEnabled(True)
         self.ctrl_panel.camera_btn.setStyleSheet("ctrl_btn{color:rgb(0,0,0)}")
@@ -411,6 +410,6 @@ class custom_window(QMainWindow):
 
         for idx, child in enumerate(self.pool):
             child.join()
-        
+
         sys.stdout = sys.__stdout__
         super().closeEvent(event)

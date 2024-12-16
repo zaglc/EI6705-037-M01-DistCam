@@ -1,6 +1,7 @@
+from typing import List, Union
+
 import cv2
 import numpy as np
-from typing import List, Union
 from ultralytics import YOLO
 
 from detector.base.detect_result import DetectionResult, create_detection_result
@@ -65,5 +66,3 @@ class YOLODetector:
 
         cap.release()
         return detection_results
-
-    
