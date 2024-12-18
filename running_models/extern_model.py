@@ -16,7 +16,7 @@ from running_models.yolov3_utils import (
 
 YOLOV3_DETECT = "yolov3-detect"
 YOLOV11_TRACK = "YOLOV11_TRACK"
-IMG_SIZE = 1920
+IMG_SIZE = 512
 
 
 class Engine:
@@ -39,6 +39,7 @@ def initialize_model(
     local_num_cam: int,
     type: str = "YOLOV11_TRACK",
     weights: str = "yolo11n.pt",
+    inference_device: str = "cpu",
     data_class: str = "configs/names.txt",
     log_file: str = "logs/tracking_log.txt",
     seedid: int = 1024,
@@ -46,37 +47,35 @@ def initialize_model(
     random.seed(seedid)
     classes = load_classes(data_class)
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(classes))]
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
     if type == YOLOV3_DETECT:
         from running_models.yolov3.models import Darknet
 
         cfg = "./running_models/yolov3/cfg/yolov3-t.cfg"
         img_size = IMG_SIZE
-        device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
         model = Darknet(cfg, img_size)
-        torch_model = torch.load(weights, map_location=device)
+        torch_model = torch.load(weights, map_location=inference_device)
         try:    
             model.load_state_dict(torch_model["model"])
         except:
             print("Warning: failed load model, try again using relaxed mode")
             model.load_state_dict(torch_model["model"], strict=False)
-        model.to(device).eval()
+        model.to(inference_device).eval()
 
-        chunk_tsr = torch.zeros((local_num_cam, 3, int(img_size * 9 / 16), img_size)).float().to(device)
+        chunk_tsr = torch.zeros((local_num_cam, 3, int(img_size * 9 / 16), img_size)).float().to(inference_device)
         model(chunk_tsr, augment=False)
-        engine = Engine(model, device, type)
+        engine = Engine(model, inference_device, type)
 
     elif type == YOLOV11_TRACK:
         engine = ObjectCounter(
-            device=device,
+            device=inference_device,
             weights=weights,
             classes_of_interest=classes,
             log_file=log_file,
         )
 
-    return engine, device, classes, colors
+    return engine, classes, colors
 
 
 def preprocess_img(ori_img: np.ndarray, type: str = YOLOV3_DETECT, img_size: int = IMG_SIZE, device: str = "cuda:0"):

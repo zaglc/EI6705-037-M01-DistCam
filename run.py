@@ -49,6 +49,7 @@ def model_Main(
     ddp_id: int,
     model_type: str,
     model_weight: str,
+    inference_device: str,
     data_queue: Queue,
     result_queue: List[Queue],
     stream: Stream,
@@ -66,7 +67,7 @@ def model_Main(
     # model loading and cuda memory pre-allocating
     batch = 1
     running_status = RS_WAITING
-    model, device, classes, colors = initialize_model(local_num_cam, model_type, model_weight)
+    model, classes, colors = initialize_model(local_num_cam, model_type, model_weight)
     for queue in result_queue:
         queue.put((classes, colors))
 
@@ -101,7 +102,7 @@ def model_Main(
         # no matter which frame submit data, inference will be executed when enough data is collected
         if fetch > 0:
             chunk_tsr = torch.stack(tsr_lst, dim=0)
-            chunk_tsr = chunk_tsr.to(device=device)
+            chunk_tsr = chunk_tsr.to(device=inference_device)
             results = model(chunk_tsr, augment=False)
 
         # dispatch results to corresponding process
@@ -120,6 +121,8 @@ def model_Main(
 
 def frame_Main(
     camera: Camera,
+    model_type: str,
+    inference_device: str,
     frame_write_queue: Queue,  # main -> frame_main
     command_read_queue: Queue,  # frame_main -> main
     data_queue: Queue,  # frame_main, main -> model_main
@@ -149,7 +152,7 @@ def frame_Main(
         if pkg_loss:
             ret_val_main = FV_PKGLOSS_OCCUR_F
         if model_run == RS_RUNNING:
-            tsr = preprocess_img(frame)
+            tsr = preprocess_img(frame, model_type, device=inference_device)
             data_queue.put((camera.id, model_run, tsr))
             try:
                 (result,) = result_queue.get(WAITING_TIME)
@@ -242,6 +245,8 @@ def initialize(file: str, num_cam: int, model_type: str, model_weight: str):
     frame_write_queues = [Queue() for _ in range(num_cam)]
     # for receiving command from main process
     command_queues = [Queue() for _ in range(num_cam)]
+    # The device model inference executes on
+    inference_device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
     # prepare processes
     cam_pool: List[Process] = []
@@ -255,6 +260,7 @@ def initialize(file: str, num_cam: int, model_type: str, model_weight: str):
                     ddp_idx,
                     model_type,
                     model_weight,
+                    inference_device,
                     data_queues[ddp_idx],
                     result_queues[ddp_idx * length : (ddp_idx + 1) * length],
                     gpc_stream,
@@ -268,6 +274,8 @@ def initialize(file: str, num_cam: int, model_type: str, model_weight: str):
                 target=frame_Main,
                 args=(
                     camera_lst[cam_idx],
+                    model_type,
+                    inference_device,
                     frame_write_queues[cam_idx],
                     command_queues[cam_idx],
                     data_queues[cam_idx // length],
