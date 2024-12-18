@@ -53,6 +53,7 @@ class QThread4VideoDisplay(QThread):
         """
 
         super().__init__(parent)
+        self.name = f"QThread4VideoDisplay-{thread_id}"
         self.id = thread_id
         self.frame_queue = frame_queue
         self.command_queue = command_queue
@@ -66,10 +67,12 @@ class QThread4VideoDisplay(QThread):
 
         # QLock protecting internal, infrequently called variables
         self.switch_cam_lock = QMutex()
-        self.Qconds = QWaitCondition()
+
+        # switch camera source
+        self.switch_flag = False
+        self.vid_src_info_tuple = None
 
         # internal variable
-        self.switch_flag = False
         self.need_refresh_cam_flag = False
         self.model_flag = False
 
@@ -86,6 +89,7 @@ class QThread4VideoDisplay(QThread):
         Main loop for QThread4VideoDisplay
         """
 
+        print(f"{self.name} launched")
         time0 = time.time()
         while True:
 
@@ -101,6 +105,8 @@ class QThread4VideoDisplay(QThread):
             # button: video source switching
             switch_flag = self.switch_flag
             self.switch_flag = False
+            vid_tuple = self.vid_src_info_tuple
+            self.vid_src_info_tuple = None
             # action: model inference on or off
             model_flag = self.model_flag
             self.model_flag = False
@@ -128,10 +134,12 @@ class QThread4VideoDisplay(QThread):
 
             # prepare command for frame_process, each period <--> one command
             ret_cmd = FV_QTHREAD_READY_Q
+            command_msg = None
             if pause_flag:
                 self.is_paused = not self.is_paused
                 ret_cmd = FV_QTHREAD_PAUSE_Q
             elif switch_flag:
+                command_msg = vid_tuple
                 self.switch_btn_recover_signal.emit()
                 ret_cmd = FV_SWITCH_CHANNEL_Q
             elif refresh_cam_flag:
@@ -139,6 +147,7 @@ class QThread4VideoDisplay(QThread):
             elif model_flag:
                 ret_cmd = FV_FLIP_MODEL_ENABLE_Q
             elif ctrl_flag:
+                command_msg = ctrl_info
                 ret_cmd = FV_PTZ_CTRL_Q
             elif cam_f:
                 self.camera_capture_recover_signal.emit()
@@ -157,9 +166,10 @@ class QThread4VideoDisplay(QThread):
             time0 = time4
 
             # write command to frame_main
-            self.command_queue.put((FV_RUNNING if self.is_running else FV_STOP, ret_cmd, ctrl_info))
+            self.command_queue.put((FV_RUNNING if self.is_running else FV_STOP, ret_cmd, command_msg))
             if not self.is_running:
                 break
+        print(f"{self.name} normally quit")
 
 
 class QThread4stdout(QThread):
@@ -176,13 +186,17 @@ class QThread4stdout(QThread):
 
         super().__init__(parent)
         self.is_running = True
+        self.name = "QThread4stdout"
 
     def run(self):
         """
         Main loop for QThread4stdout
         """
+
+        print(f"{self.name} launched")
         while True:
             text = gpc_stream.log_buffer.get()
             self.redirect_signal.emit(text)
             if not self.is_running:
                 break
+        print(f"{self.name} normally quit")

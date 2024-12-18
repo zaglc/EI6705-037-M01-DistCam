@@ -1,11 +1,9 @@
-import time
-from ctypes import CDLL, WinDLL, cdll
+import os
 from ctypes import create_string_buffer as csb
-from ctypes import windll
 from queue import Empty
 from queue import Queue as TQueue
-from threading import Thread
-from typing import Tuple
+from threading import Thread, current_thread
+from typing import Callable, Tuple
 
 from central_monitor.HCNetSDK import (
     DOWN_LEFT,
@@ -38,19 +36,21 @@ class Controller:
         self.brightness_factor = 1.0
         self.brightness_bound = (0.5, 1.5)
 
-        self._update_freq = 60
-        self._change_rate = 0.005
+        self._update_freq = 10
+        self._change_rate = 0.05
 
         self.login_flag = True
-        self.is_running = False
+        self.is_running = True
         self.src_type = src_type
-        self.HCsdk: CDLL | WinDLL = None
+        self.HCsdk = None
         # self.thread = Thread(target=self._update_box_thread, daemon=True)
         self.login_config = login_config
 
     def start_thread(self, local_command_queue: TQueue) -> None:
 
         self._local_command_queue = local_command_queue
+        self.thread = Thread(target=self._update_box_thread, daemon=True)
+        self.thread.start()
         self.switch_vid_src(self.src_type, self.login_config)
 
     def switch_vid_src(self, src_type: str, login_config: dict) -> None:
@@ -58,21 +58,19 @@ class Controller:
         switch src_type and login to embedding device if needed
         """
 
-        self.thread = Thread(target=self._update_box_thread, daemon=True)
-        sys_platform = system_get_platform_info()
+        sys_platform, dll_loader = system_get_platform_info()
         self.src_type = src_type
         self.login_config = login_config
         if src_type == "hikvision":
-            self.is_running = False
-            self._init_dll(sys_platform)
+            self._init_dll(sys_platform, dll_loader)
             self._login(login_config)
         else:
             if not self.thread.is_alive():
-                self.is_running = True
+                self.thread.join()
                 self.thread = Thread(target=self._update_box_thread, daemon=True)
                 self.thread.start()
 
-    def _init_dll(self, sys_platform: str) -> None:
+    def _init_dll(self, sys_platform: str, dll_loader: Callable) -> None:
         """
         initialize necessary library
 
@@ -83,10 +81,10 @@ class Controller:
 
         if self.login_flag:
             if sys_platform == "linux":
-                self.HCsdk = cdll.LoadLibrary("linux-lib/libhcnetsdk.so")
+                self.HCsdk = dll_loader(os.path.join("libs", "linux", "libhcnetsdk.so"))
                 self.HCsdk.NET_DVR_Init()
             elif sys_platform == "windows":
-                self.HCsdk = windll.LoadLibrary("win-lib/HCNetSDK.dll")
+                self.HCsdk = dll_loader(os.path.join("libs", "windows", "HCNetSDK.dll"))
                 self.HCsdk.NET_DVR_Init()
             else:
                 print("Unsupported platform")
@@ -148,34 +146,41 @@ class Controller:
         """
 
         def adjust(item_ids, directions):
+            adjusted = False
             for item_id, direction in zip(item_ids, directions):
                 if item_id < 4:
-                    if (
-                        self.normalized_box[item_id] < self.box_bound[1]
-                        and self.normalized_box[item_id] > self.box_bound[0]
+                    if (direction == 1 and self.normalized_box[item_id] < self.box_bound[1]) or (
+                        direction == -1 and self.normalized_box[item_id] > self.box_bound[0]
                     ):
                         self.normalized_box[item_id] += self._change_rate * direction
+                        self.normalized_box[item_id] = round(self.normalized_box[item_id], 2)
+                        adjusted = True
                 else:
-                    if (
-                        self.brightness_factor < self.brightness_bound[1]
-                        and self.brightness_factor > self.brightness_bound[0]
+                    if (direction == 1 and self.brightness_factor < self.brightness_bound[1]) or (
+                        direction == -1 and self.brightness_factor > self.brightness_bound[0]
                     ):
                         self.brightness_factor += self._change_rate * direction
+                        self.brightness_factor = round(self.brightness_factor, 2)
+                        adjusted = True
+
+            return adjusted
 
         command_dicts = {
-            TILT_UP: [[1], [1]],
-            TILT_DOWN: [[1], [-1]],
+            TILT_UP: [[1], [-1]],
+            TILT_DOWN: [[1], [1]],
             PAN_LEFT: [[0], [-1]],
             PAN_RIGHT: [[0], [1]],
-            UP_LEFT: [[0, 1], [-1, 1]],
-            UP_RIGHT: [[0, 1], [1, 1]],
-            DOWN_LEFT: [[0, 1], [-1, -1]],
-            DOWN_RIGHT: [[0, 1], [1, -1]],
-            ZOOM_IN: [[2, 3], [1, 1]],
-            ZOOM_OUT: [[2, 3], [-1, -1]],
+            UP_LEFT: [[0, 1], [-1, -1]],
+            UP_RIGHT: [[0, 1], [1, -1]],
+            DOWN_LEFT: [[0, 1], [-1, 1]],
+            DOWN_RIGHT: [[0, 1], [1, 1]],
+            ZOOM_IN: [[2, 3], [-1, -1]],
+            ZOOM_OUT: [[2, 3], [1, 1]],
             IRIS_OPEN: [[4], [1]],
             IRIS_CLOSE: [[4], [-1]],
         }
+        thread_name = current_thread().name
+        print(f"{thread_name} launch")
 
         while True:
             op = self._local_command_queue.get()
@@ -190,4 +195,9 @@ class Controller:
                     break
                 except Empty:
                     if op[0] != FOCUS_FAR and op[0] != FOCUS_NEAR:
-                        adjust(*command_dicts[op[0]])
+                        adjusted = adjust(*command_dicts[op[0]])
+                        if not adjusted:
+                            break
+                        # print(self.normalized_box)
+
+        print(f"{thread_name} normally quit")
