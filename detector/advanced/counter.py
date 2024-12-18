@@ -49,7 +49,7 @@ class ObjectCounter(YOLODetector):
         """
         timestamp = self._frame_to_timestamp(frame_index)
         log_message = f"{timestamp}, {event_type}: {details}\n"
-        with open(self.log_file, "a") as log_file:
+        with open(self.log_file, "a+") as log_file:
             log_file.write(log_message)
 
     def alert_callback(frame_index: int):
@@ -122,11 +122,11 @@ class ObjectCounter(YOLODetector):
         detection_result = create_detection_result(self.frame_index, self._predict_one_frame(frame))
         self.count_objects_in_frame(detection_result)  # Update cumulative count
         self.frame_index += 1
-        for name, conf, *xywh in zip(detection_result.names, detection_result.conf, detection_result.boxes):
+        for name, conf, xywh in zip(detection_result.names, detection_result.conf, detection_result.boxes):
             tl = round(0.002 * (frame.shape[0] + frame.shape[1]) / 2) + 1  # line/font thickness
             c1 = tuple(map(int, (xywh[0] - xywh[2] / 2, xywh[1] - xywh[3] / 2)))
             c2 = tuple(map(int, (xywh[0] + xywh[2] / 2, xywh[1] + xywh[3] / 2)))
-            color = color or [random.randint(0, 255) for _ in range(3)]
+            color = [random.randint(0, 255) for _ in range(3)]
             cv2.rectangle(frame, c1, c2, color, thickness=tl, lineType=cv2.LINE_AA)
             if name and conf > 0.7:
                 tf = max(tl - 1, 1)  # font thickness

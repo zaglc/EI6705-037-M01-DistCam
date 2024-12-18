@@ -38,7 +38,7 @@ def create_detection_result(frame_index: int, results) -> DetectionResult:
     :param results: The detection model's output.
     :return: A DetectionResult instance.
     """
-    names = results[0].names
+    names = results[0].names.values()
     cls = results[0].boxes.cls.cpu().tolist()
     conf = results[0].boxes.conf.cpu().tolist()
     boxes = results[0].boxes.xywh.cpu().tolist()

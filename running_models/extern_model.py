@@ -31,6 +31,11 @@ class Engine:
             pred = self.model(*args, **kwargs)[0]
             pred = pred.clone().detach().cpu()
             results = non_max_suppression(pred, conf_thres=0.2, iou_thres=0.4, multi_label=False)
+        elif self.type == YOLOV11_TRACK:
+            # inputs = np.array([input.numpy() for input in args]).squeeze(1)
+            for input in args:
+                pred = self.model.online_predict(input.squeeze(0).numpy())
+            return [None] * len(args)
 
         return results
 
@@ -65,16 +70,16 @@ def initialize_model(
 
         chunk_tsr = torch.zeros((local_num_cam, 3, int(img_size * 9 / 16), img_size)).float().to(inference_device)
         model(chunk_tsr, augment=False)
-        engine = Engine(model, inference_device, type)
 
     elif type == YOLOV11_TRACK:
-        engine = ObjectCounter(
+        model = ObjectCounter(
             device=inference_device,
             weights=weights,
             classes_of_interest=classes,
             log_file=log_file,
         )
 
+    engine = Engine(model, inference_device, type)
     return engine, classes, colors
 
 
@@ -88,6 +93,8 @@ def preprocess_img(ori_img: np.ndarray, type: str = YOLOV3_DETECT, img_size: int
         img = torch.from_numpy(img).to(device)
 
         img = img.float() / 255.0
+    else:
+        img = torch.from_numpy(ori_img).to(device)
 
     return img
 

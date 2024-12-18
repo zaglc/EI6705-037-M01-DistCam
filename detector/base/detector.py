@@ -39,7 +39,7 @@ class YOLODetector:
             raise ValueError("Input frame must have shape (1080, 1920, 3).")
 
         results = self.model.track(frame, persist=True)
-        return results[0]
+        return results
 
     def offline_predict(self, video_path: str) -> List[DetectionResult]:
         """
