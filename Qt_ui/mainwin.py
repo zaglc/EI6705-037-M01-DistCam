@@ -412,7 +412,7 @@ class custom_window(QMainWindow):
 
         # pass quit flag to sub-processes
         for queue in self.data_queues:
-            queue.put((0, RS_STOP, None))
+            queue.put((0, RS_STOP, None, None))
         for queue in self.command_queues:
             queue.put((RS_STOP, None, None))
 
