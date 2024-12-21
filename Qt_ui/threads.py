@@ -75,6 +75,7 @@ class QThread4VideoDisplay(QThread):
         # internal variable
         self.need_refresh_cam_flag = False
         self.model_flag = False
+        self.model_type = "None"
 
         self.display_real_flag = 0
         self.camera_active = 0
@@ -110,6 +111,7 @@ class QThread4VideoDisplay(QThread):
             # action: model inference on or off
             model_flag = self.model_flag
             self.model_flag = False
+            model_type = self.model_type 
             # button: camera capture
             cam_f = self.camera_active
             self.camera_active = 0
@@ -145,7 +147,9 @@ class QThread4VideoDisplay(QThread):
             elif refresh_cam_flag:
                 ret_cmd = FV_FLIP_SIMU_STREAM_Q
             elif model_flag:
+                command_msg = model_type
                 ret_cmd = FV_FLIP_MODEL_ENABLE_Q
+                print("Model type: ", command_msg)
             elif ctrl_flag:
                 command_msg = ctrl_info
                 ret_cmd = FV_PTZ_CTRL_Q

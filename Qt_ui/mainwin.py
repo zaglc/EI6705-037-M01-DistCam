@@ -17,11 +17,14 @@ from PyQt6.QtWidgets import (
 )
 
 from Qt_ui.childwins.save_prefer import childWindow
+from Qt_ui.childwins.model_selection import ModelSelectionWindow
 from Qt_ui.ctrl_panel.ctrl_panel import ctrl_panel
 from Qt_ui.data_panel.data_table import Realtime_Datatab
 from Qt_ui.terminal_panel.output_log import terminal
 from Qt_ui.utils import RS_RUNNING, RS_STOP, RS_WAITING
 from Qt_ui.view_panel.display import Ui_MainWindow as dis_win
+
+from running_models.extern_model import get_model_name_list
 
 
 class custom_window(QMainWindow):
@@ -45,7 +48,6 @@ class custom_window(QMainWindow):
         self.setCentralWidget(ctw)
         self.model_status = RS_WAITING
         self.num_cam = gpc["num_cam"]
-        self.model_type = gpc["model_type"]  # TODO: can dynamic change by front-end
 
         # only for start and stop model process
         self.data_queues = gpc["data_queues"]
@@ -173,9 +175,8 @@ class custom_window(QMainWindow):
         simu_stream_act.triggered.connect(self.refresh_active_cam_slot)
         model_inference_act = QAction("Model inference", self)
         model_inference_act.setStatusTip("Open/Close model inference")
-        model_inference_act.setCheckable(True)
         model_inference_act.setShortcut("ctrl+m")
-        model_inference_act.triggered.connect(self.enable_model_infer_slot)
+        model_inference_act.triggered.connect(self.model_inference_set_slot)
         save_preference_act = QAction("Preference setting...", self)
         save_preference_act.setStatusTip("Saving preference setting")
         save_preference_act.triggered.connect(self.save_prefer_set_slot)
@@ -332,19 +333,27 @@ class custom_window(QMainWindow):
             win.frame_thread.need_refresh_cam_flag = True
             win.switch_cam_lock.unlock()
 
-    def enable_model_infer_slot(self):
-        """
-        slot function for flipping model_flag
-        which indicating whether model inference should be activated or not
-        """
+    def model_inference_set_slot(self):
+        model_list = ['None'] + get_model_name_list()
+        dialog = ModelSelectionWindow(self, self.num_cam, model_list)
 
-        self.model_status = RS_RUNNING if self.model_status == RS_WAITING else RS_RUNNING
-        for queue in self.data_queues:
-            queue.put((0, self.model_status, None))
-        for win in self.dis.videoWin:
-            win.switch_cam_lock.lock()
-            win.frame_thread.model_flag = True
-            win.switch_cam_lock.unlock()
+        ret = dialog.exec()
+        if ret is not None:
+            current_model = dialog.get_model_selected()
+            print(f"Select model: {current_model}")
+
+            self.model_status = RS_RUNNING if current_model != "None" else RS_WAITING
+
+            for queue in self.data_queues:
+                queue.put((0, self.model_status, None, current_model))
+            for win in self.dis.videoWin:
+                win.switch_cam_lock.lock()
+                win.frame_thread.model_flag = True
+                win.frame_thread.model_type = current_model
+                win.switch_cam_lock.unlock()
+
+        dialog.destroy()
+
 
     def save_prefer_set_slot(self):
         img_lst = []
