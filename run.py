@@ -34,8 +34,6 @@ from Qt_ui.utils import (
     safe_get,
 )
 from running_models.extern_model import (
-    YOLOV3_DETECT,
-    YOLOV11_TRACK,
     initialize_model_engine,
     preprocess_img,
     process_result,
@@ -48,6 +46,7 @@ def model_Main(
     local_num_cam: int,
     ddp_id: int,
     inference_device: str,
+    model_config: str,
     data_queue: Queue,
     result_queue: List[Queue],
     stream: Stream,
@@ -65,7 +64,7 @@ def model_Main(
     # model loading and cuda memory pre-allocating
     batch = 1
     running_status = RS_WAITING
-    model, classes, colors = initialize_model_engine(local_num_cam, inference_device)
+    model, classes, colors = initialize_model_engine(local_num_cam, inference_device, model_config)
     for queue in result_queue:
         queue.put((classes, colors))
 
@@ -126,6 +125,7 @@ def model_Main(
 def frame_Main(
     camera: Camera,
     inference_device: str,
+    model_config: dict,
     frame_write_queue: Queue,  # main -> frame_main
     command_read_queue: Queue,  # frame_main -> main
     data_queue: Queue,  # frame_main, main -> model_main
@@ -157,11 +157,11 @@ def frame_Main(
         if pkg_loss:
             ret_val_main = FV_PKGLOSS_OCCUR_F
         if model_run == RS_RUNNING:
-            tsr = preprocess_img(frame, model_type, device=inference_device)
+            tsr = preprocess_img(frame, model_config, model_type, device=inference_device)
             data_queue.put((camera.id, model_run, tsr, model_type))
             try:
                 (result,) = result_queue.get(timeout=WAITING_TIME*100) # Large but not blocking in case of deadlock
-                frame = process_result(frame, result, classes, colors, model_type)
+                frame = process_result(frame, result, classes, colors, model_config, model_type)
             except Empty:
                 pass
 
@@ -223,7 +223,7 @@ def frame_Main(
     sys.stdout = sys.__stdout__
 
 
-def initialize(file: str, num_cam: int):
+def initialize(file: str, num_cam: int, model_config: str):
     """
     initial all things from config file
     """
@@ -233,6 +233,13 @@ def initialize(file: str, num_cam: int):
 
     with open(file, "r") as f:
         config = json.load(f)
+
+    model_config_dict = None
+    if model_config is not None:
+        with open(model_config, "r") as f:
+            model_config_dict = json.load(f)
+    else:
+        print("[WARNING] Model Config not specified")
 
     # number of cameras, size of data parallel
     default = config["choices"]
@@ -265,6 +272,7 @@ def initialize(file: str, num_cam: int):
                     length,
                     ddp_idx,
                     inference_device,
+                    model_config_dict,
                     data_queues[ddp_idx],
                     result_queues[ddp_idx * length : (ddp_idx + 1) * length],
                     gpc_stream,
@@ -279,6 +287,7 @@ def initialize(file: str, num_cam: int):
                 args=(
                     camera_lst[cam_idx],
                     inference_device,
+                    model_config_dict,
                     frame_write_queues[cam_idx],
                     command_queues[cam_idx],
                     data_queues[cam_idx // length],
@@ -297,6 +306,7 @@ def initialize(file: str, num_cam: int):
         "result_queues": result_queues,
         "frame_write_queues": frame_write_queues,
         "command_queues": command_queues,
+        "model_config": model_config_dict,
         "pool": cam_pool,
         "current_chosen_video_source": default,
         "video_source_info_lst": srcs,
@@ -308,10 +318,12 @@ def initialize(file: str, num_cam: int):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="arguments for main process")
     parser.add_argument("-n", "--num_cam", type=int, default=1, help="number of cameras to be monitored")
+    parser.add_argument("-c", "--config",  type=str, default=None, help="Path to the json file of model config")
     args = parser.parse_args()
 
-    num_cam = args.num_cam
-    gpc = initialize("./configs/video_source_pool.json", num_cam)
+    num_cam      = args.num_cam
+    model_config = args.config
+    gpc = initialize("./configs/video_source_pool.json", num_cam, model_config)
     try:
         app = QApplication(sys.argv)
         MainWindow = custom_window(gpc)

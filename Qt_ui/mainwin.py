@@ -24,9 +24,6 @@ from Qt_ui.terminal_panel.output_log import terminal
 from Qt_ui.utils import RS_RUNNING, RS_STOP, RS_WAITING
 from Qt_ui.view_panel.display import Ui_MainWindow as dis_win
 
-from running_models.extern_model import get_model_name_list
-
-
 class custom_window(QMainWindow):
     """
     Main window, including:
@@ -55,6 +52,8 @@ class custom_window(QMainWindow):
         self.frame_write_queues = gpc["frame_write_queues"]
         # video command and ctrl command, maintained by custom_window
         self.command_queues = gpc["command_queues"]
+
+        self.model_config = gpc['model_config']
 
         self.pool = gpc["pool"]
         self.streaming = False
@@ -334,7 +333,7 @@ class custom_window(QMainWindow):
             win.switch_cam_lock.unlock()
 
     def model_inference_set_slot(self):
-        model_list = ['None'] + get_model_name_list()
+        model_list = ['None'] + list(self.model_config.keys())
         dialog = ModelSelectionWindow(self, self.num_cam, model_list)
 
         ret = dialog.exec()

@@ -1,0 +1,13 @@
+{
+    "yolov3-detect": {
+        "name":         "yolov3-detect",
+        "img_size":     512,
+        "weight":       "running_models/yolov3/weights/110-0.447.pt",
+        "config":       "./running_models/yolov3/cfg/yolov3-t.cfg"
+    },
+    "yolov11-track": {
+        "name":         "yolov11-track",
+        "img_size":     1920,
+        "weight":       "yolo11n.pt"
+    }
+}
