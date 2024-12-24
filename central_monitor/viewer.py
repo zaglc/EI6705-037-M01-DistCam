@@ -35,6 +35,8 @@ class Viewer:
         self.max_buffer_size = 3
         self._format = {"pic": ".png", "vid": ".mp4"}
 
+        self._win = 0.008
+
     def _set_cam_info(self, cam: cv2.VideoCapture):
         """
         set camera info
@@ -157,8 +159,8 @@ class Viewer:
             # for local video data, should not read too fast
             current_time = time.time()
             if self.fps > 0:
-                time.sleep(max(0, 1 / self.fps - current_time + last_fetch_time))
-            last_fetch_time = current_time
+                time.sleep(max(0, 1 / self.fps - current_time + last_fetch_time - self._win))
+            last_fetch_time = time.time()
 
             # read frame
             ret = cam.grab()
@@ -266,6 +268,8 @@ class Viewer:
         switch channel invoked by outer subprocess for frame fetch
         """
 
+        self.src_type = src_type
+
         with self._lock:
             simu_stream = self.simu_stream
 
@@ -289,7 +293,6 @@ class Viewer:
 
         self.src_name = name
         self.current_url = url
-        self.src_type = src_type
 
     def flip_inter_val(self, attr: str) -> None:
         """

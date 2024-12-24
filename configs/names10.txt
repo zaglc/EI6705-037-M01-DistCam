@@ -1,0 +1,10 @@
+tank-A
+tank-B
+boat
+warship
+tent
+car
+person
+station
+bus
+missile

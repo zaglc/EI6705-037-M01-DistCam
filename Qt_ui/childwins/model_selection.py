@@ -1,7 +1,8 @@
-import os
+import os, json, sys
 
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QDialog,
     QDialogButtonBox,
@@ -74,3 +75,15 @@ class ModelSelectionWindow(QDialog):
         """
 
         return self.model_selection.currentText()
+
+
+if __name__ == "__main__":
+    with open(os.path.join("configs", "model_config.json"), "r") as f:
+        model_list = json.load(f)
+
+    app = QApplication(sys.argv)
+    window = ModelSelectionWindow(None, 2, model_list)
+
+    ret = window.exec()
+    window.destroy()
+    sys.exit(ret)

@@ -1,0 +1,30 @@
+[2023-10-19 14:17:03.804][DBG] CCoreGlobalCtrlBase::LoadDSo, HPR_LoadDSo Succ, Path[/home/lenovo/anaconda3/envs/xzh/lib/libz.so.1.2.13], hHandleRet[-1488754224]
+[2023-10-19 14:17:03.804][INF] The COM:HCCoreBase ver is 6.1.4.15, 2020_03_05. Async:1.
+[2023-10-19 14:17:03.804][INF] The COM:Core ver is 6.1.9.48, 2023_04_10. Async:1.
+[2023-10-19 14:17:03.804][INF] This HCNetSDK ver is 6.1.9.48 Ver 2023_04_10.
+[2023-10-19 14:17:03.805][INF] Login dev 192.168.89.202:8000.
+[2023-10-19 14:17:03.805][INF] dwTotalNum[2048]
+[2023-10-19 14:17:03.808][INF] Private connect 192.168.89.202:8000 sock=140 this=0xa78be9d4 cmd=0x10000 port=50496
+[2023-10-19 14:17:03.808][INF] LogonDev1 in[192.168.89.202:8000]
+[2023-10-19 14:17:03.808][DBG] CCoreGlobalCtrlBase::LoadDSo, HPR_LoadDSo Succ, Path[/home/lenovo/xzh/CH-HCNetSDKV6.1.9.48/CH-HCNetSDK_/Demo/3-Python-development/1-preview-stream-decode-Demo/lib/linux/libcrypto.so.1.1], hHandleRet[-1483962240]
+[2023-10-19 14:17:03.808][DBG] CCoreGlobalCtrlBase::LoadDSo, HPR_LoadDSo Succ, Path[/home/lenovo/xzh/CH-HCNetSDKV6.1.9.48/CH-HCNetSDK_/Demo/3-Python-development/1-preview-stream-decode-Demo/lib/linux/libssl.so.1.1], hHandleRet[-1483960208]
+[2023-10-19 14:17:03.808][INF] SSLTRANSAPI::LoadAPI, libeay, Load Real Path[/home/lenovo/xzh/CH-HCNetSDKV6.1.9.48/CH-HCNetSDK_/Demo/3-Python-development/1-preview-stream-decode-Demo/lib/linux/libcrypto.so.1.1]
+[2023-10-19 14:17:03.808][INF] SSLTRANSAPI::IsAllAPILoaded, SSL_library_init Unload
+[2023-10-19 14:17:03.808][INF] OpenSSL, Not All Function Loaded!
+[2023-10-19 14:17:03.808][INF] SSLTRANSAPI::PrintVersion, OpenSSL version info [OpenSSL 1.1.1l  24 Aug 2021]
+[2023-10-19 14:17:03.808][INF] CSSLTrans::SSLCtxInit, dwSSLVersion[6], m_fnTLSServerMethod
+[2023-10-19 14:17:03.808][ERR] CSSLTrans::SSLTrans_CTX_Load_CA, invalid path[/home/lenovo/xzh/CH-HCNetSDKV6.1.9.48/CH-HCNetSDK_/Demo/3-Python-development/1-preview-stream-decode-Demo/lib/linux/cert/\]
+[2023-10-19 14:17:03.887][DBG] CComBase::Load, Load szDllPath[/home/lenovo/xzh/CH-HCNetSDKV6.1.9.48/CH-HCNetSDK_/Demo/3-Python-development/1-preview-stream-decode-Demo/lib/linux/HCNetSDKCom/libHCPreview.so] SUCC
+[2023-10-19 14:17:03.887][INF] AbilityAnalyze---Init-- start
+[2023-10-19 14:17:03.888][DBG] AbilityAnalyze---Init-- over, DeviceList path [/home/lenovo/xzh/CH-HCNetSDKV6.1.9.48/CH-HCNetSDK_/Demo/3-Python-development/1-preview-stream-decode-Demo/lib/linux/HCNetSDKCom/LocalXml/DeviceList.xml], load result[0]
+[2023-10-19 14:17:03.888][INF] The COM:Preview ver is 6.1.9.48, 2023_04_10.
+[2023-10-19 14:17:03.891][INF] Private connect 192.168.89.202:8000 sock=140 this=0xa78be9d4 cmd=0x30000 port=50508
+[2023-10-19 14:17:03.895][ERR] ID-IP-CHAN[0-192.168.89.202-1] [CGetTCPStream::LinkToDvr] struOut.dwDevState[13] dwErrCode[0xffffffff] dwMErrDevSelfEx[0xffffffff] CommandThread callback exception
+[2023-10-19 14:17:03.895][ERR] ID-IP-CHAN[0-192.168.89.202-1] [CPreviewSession::AllResourceStarWork] StreamGetterStartWork Failed, UserID[0]
+[2023-10-19 14:17:03.895][DBG] ID-IP-CHAN[0-192.168.89.202-1] [CPreviewSession::AllResourceStarWorkThread] EXCEPTION_PREVIEW trigger, AllResourceStarWork Failed, UserID[0] dwError[23]
+[2023-10-19 14:17:07.621][INF] Private connect 192.168.89.202:8000 sock=140 this=0xa78be9d4 cmd=0x30200 port=50514
+[2023-10-19 14:17:08.633][INF] Private connect 192.168.89.202:8000 sock=140 this=0xa78be9d4 cmd=0x30200 port=50522
+[2023-10-19 14:17:08.645][INF] COM_Logout[0][0]
+[2023-10-19 14:17:08.646][DBG] CUserMgr::UnRegisterHeartProxy[0]
+[2023-10-19 14:17:08.657][INF] Private connect 192.168.89.202:8000 sock=140 this=0xa78be9d4 cmd=0x10100 port=50524
+[2023-10-19 14:17:08.660][INF] CTransUnitMgr::UnloadTransUnitLib

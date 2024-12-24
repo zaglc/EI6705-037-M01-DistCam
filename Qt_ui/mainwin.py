@@ -8,6 +8,7 @@ from typing import List
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import (
+    QDialog,
     QMainWindow,
     QScrollArea,
     QSizePolicy,
@@ -337,7 +338,7 @@ class custom_window(QMainWindow):
         dialog = ModelSelectionWindow(self, self.num_cam, model_list)
 
         ret = dialog.exec()
-        if ret is not None:
+        if ret == QDialog.DialogCode.Accepted:
             current_model = dialog.get_model_selected()
             print(f"Select model: {current_model}")
 
@@ -377,7 +378,7 @@ class custom_window(QMainWindow):
         dialog = childWindow(self, self.num_cam, reso_info, img_lst_temp, "data/temp/box_config.json", self.curtime)
         dialog.preview_move_slot(dialog.preview_id)
         ret = dialog.exec() if img_lst_temp[0] is not None else 0
-        if ret or img_lst_temp[0] is None:
+        if ret == QDialog.DialogCode.Accepted or img_lst_temp[0] is None:
             dicts = dialog.gather_infos()
             if not os.path.exists("data/temp/"):
                 os.makedirs("data/temp/")

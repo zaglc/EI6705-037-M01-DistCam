@@ -168,11 +168,12 @@ def plot_one_box(x, img, color=None, label=None, line_thickness=None):
 
 
 def letterbox(img, new_shape=(416, 416)):
+    # original: (1080, 1920, 3), new_shape: (288, 512)
     shape = img.shape[:2]  # current shape [height, width]
     if isinstance(new_shape, int):
         new_shape = (new_shape, new_shape)
     new_unpad = new_shape
 
-    if shape[::-1] != new_unpad:  # resize
-        img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR)
+    if shape != new_unpad:  # resize
+        img = cv2.resize(img, new_unpad[::-1], interpolation=cv2.INTER_LINEAR)
     return img

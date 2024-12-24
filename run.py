@@ -37,6 +37,8 @@ from running_models.extern_model import (
     initialize_model_engine,
     preprocess_img,
     process_result,
+    YOLOV11_TRACK,
+    YOLOV3_DETECT
 )
 
 WAITING_TIME = 0.01
@@ -46,7 +48,7 @@ def model_Main(
     local_num_cam: int,
     ddp_id: int,
     inference_device: str,
-    model_config: str,
+    model_config: dict,
     data_queue: Queue,
     result_queue: List[Queue],
     stream: Stream,
@@ -62,22 +64,22 @@ def model_Main(
     stream._add_item(os.getpid(), f"MODEL {ddp_id}")
 
     # model loading and cuda memory pre-allocating
-    batch = 1
+    batch = min(local_num_cam, 4)
     running_status = RS_WAITING
     model, classes, colors = initialize_model_engine(local_num_cam, inference_device, model_config)
     for queue in result_queue:
         queue.put((classes, colors))
+    model._hot_init()
 
     while True:
         # if model inference is needed, data to be inferenced will be in data_queue
         # rank-0 send start and end signal
-        fetch, tsr_lst, sender_lst = 0, [], []
-        model_type = "None"
+        fetch, tsr_lst, sender_lst, model_type_lst = 0, [], [], []
 
         while fetch < batch:
             if running_status == RS_WAITING:
                 new_data = data_queue.get()
-                (vid_id, running_status, tsr, data_model_request) = new_data
+                (vid_id, running_status, _, data_model_request) = new_data
 
             if running_status == RS_WAITING:
                 continue
@@ -92,8 +94,8 @@ def model_Main(
                         if tsr is not None:
                             tsr_lst.append(tsr)
                             sender_lst.append(vid_id)
+                            model_type_lst.append(data_model_request)
                             fetch += 1
-                        model_type = data_model_request
                     else:
                         size = data_queue.qsize()
                         for _ in range(size):
@@ -104,9 +106,26 @@ def model_Main(
 
         # no matter which frame submit data, inference will be executed when enough data is collected
         if fetch > 0:
-            chunk_tsr = torch.stack(tsr_lst, dim=0)
-            chunk_tsr = chunk_tsr.to(device=inference_device)
-            results = model(chunk_tsr, model_type, augment=False)
+            # all are v3, v11
+            if set(model_type_lst) == 1:
+                model.set_model(model_type_lst[0])
+                if model_type_lst[0] == YOLOV11_TRACK:
+                    chunk_tsr = tsr_lst
+                else:
+                    chunk_tsr = torch.stack(tsr_lst, dim=0)
+                    chunk_tsr = chunk_tsr.to(device=inference_device)
+                results = model(chunk_tsr, augment=False)
+            # process each one respectively for type discrepancy
+            else:
+                results = []
+                for i in range(fetch):
+                    model.set_model(model_type_lst[i])
+                    if model_type_lst[i] == YOLOV3_DETECT:
+                        chunk_tsr = tsr_lst[i].unsqueeze(0).to(device=inference_device)
+                    else:
+                        chunk_tsr = tsr_lst[i]
+                    result = model(chunk_tsr, augment=False)[0]
+                    results.append(result)
 
         # dispatch results to corresponding process
         for i in range(fetch):
@@ -234,12 +253,8 @@ def initialize(file: str, num_cam: int, model_config: str):
     with open(file, "r") as f:
         config = json.load(f)
 
-    model_config_dict = None
-    if model_config is not None:
-        with open(model_config, "r") as f:
-            model_config_dict = json.load(f)
-    else:
-        print("[WARNING] Model Config not specified")
+    with open(model_config, "r") as f:
+        model_config_dict = json.load(f)
 
     # number of cameras, size of data parallel
     default = config["choices"]
@@ -318,12 +333,14 @@ def initialize(file: str, num_cam: int, model_config: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="arguments for main process")
     parser.add_argument("-n", "--num_cam", type=int, default=1, help="number of cameras to be monitored")
-    parser.add_argument("-c", "--config",  type=str, default=None, help="Path to the json file of model config")
+    parser.add_argument("-v", "--video_config",  type=str, default=os.path.join("configs","video_source_pool.json"), help="Path to the json file of video source pool")
+    parser.add_argument("-m", "--model_config",  type=str, default=os.path.join("configs","model_config.json"), help="Path to the json file of model config")
     args = parser.parse_args()
 
     num_cam      = args.num_cam
-    model_config = args.config
-    gpc = initialize("./configs/video_source_pool.json", num_cam, model_config)
+    model_config = args.model_config
+    video_config = args.video_config
+    gpc = initialize(video_config, num_cam, model_config)
     try:
         app = QApplication(sys.argv)
         MainWindow = custom_window(gpc)
