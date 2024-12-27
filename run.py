@@ -26,6 +26,7 @@ from Qt_ui.utils import (
     FV_RUNNING,
     FV_STOP,
     FV_SWITCH_CHANNEL_Q,
+    FV_UPDATE_VID_INFO_F,
     RS_RUNNING,
     RS_STOP,
     RS_WAITING,
@@ -168,13 +169,27 @@ def frame_Main(
     model_type = "None"
 
     model_run = RS_WAITING
-    ret_val_main = FV_FRAME_PROC_READY_F
+    ret_status = FV_FRAME_PROC_READY_F
+    ret_val_main = None
     frame_status = FV_RUNNING
+
+    temp_resolution = None
     while True:
         # get frame
         (frame, pkg_loss) = frame_read_queue.get()
-        if pkg_loss:
-            ret_val_main = FV_PKGLOSS_OCCUR_F
+
+        # update value that: frame_main -> main
+        if temp_resolution is not None:
+            ret_val_main = temp_resolution
+            ret_status = FV_UPDATE_VID_INFO_F
+            temp_resolution = None
+        elif pkg_loss:
+            ret_val_main = pkg_loss
+            ret_status = FV_PKGLOSS_OCCUR_F
+        else:
+            ret_val_main = None
+            ret_status = FV_FRAME_PROC_READY_F
+        
         if model_run == RS_RUNNING:
             tsr = preprocess_img(frame, model_config, model_type, device=inference_device)
             data_queue.put((camera.id, model_run, tsr, model_type))
@@ -194,8 +209,7 @@ def frame_Main(
             # if camera.id == 0:
             # print(frame.shape, y2-y1, x2-x1)
             frame = frame[y1:y2, x1:x2, :].copy()
-        frame_write_queue.put((frame, (ret_val_main, pkg_loss)))
-        ret_val_main = FV_FRAME_PROC_READY_F
+        frame_write_queue.put((frame, (ret_status, ret_val_main)))
 
         # get command
         (frame_status, cmd, cmd_val) = command_read_queue.get()
@@ -213,7 +227,7 @@ def frame_Main(
             if need_pause:
                 camera.viewer.flip_inter_val("need_send")
             elif need_switch:
-                camera.switch_vid_src(*cmd_val)
+                temp_resolution = camera.switch_vid_src(*cmd_val)
             elif need_refresh:
                 camera.viewer.flip_inter_val("simu_stream")
             elif need_model:

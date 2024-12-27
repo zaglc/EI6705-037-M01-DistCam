@@ -12,6 +12,8 @@ from typing import Dict, List
 import cv2
 import numpy as np
 
+from Qt_ui.utils import BOX_JSON_PATH
+
 
 class Viewer:
     def __init__(self, src_type, login_config: list, id: int) -> None:
@@ -47,6 +49,8 @@ class Viewer:
         height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.resolution = (width, height)
         print(f"camera {self.id} start video source with resolution: {self.resolution}, fps: {self.fps}")
+
+        return self.resolution
 
     def _get_url(self, login_config: list):
         """
@@ -253,17 +257,17 @@ class Viewer:
 
         if src_name is None:
             src_name = self.src_name
-        if os.path.exists("data/temp/box_config.json"):
-            with open("data/temp/box_config.json", "r") as f:
+        if os.path.exists(BOX_JSON_PATH):
+            with open(BOX_JSON_PATH, "r") as f:
                 s_p = json.load(f)
-                cur_b = s_p[src_name]
+                cur_b = s_p["box_list"][src_name]
                 self.fig_size[src_name] = (cur_b["res_w"], cur_b["res_h"])
                 self.cbox[src_name] = (cur_b["cp_x"], cur_b["cp_y"], cur_b["cp_w"], cur_b["cp_h"])
                 self.use_cbox = s_p["apply_cbox"]
                 self.obj_id[src_name] = cur_b["class_id"]
                 self.capture_path = s_p["select_path"]
 
-    def switch_vid_src(self, src_type: str, login_config: dict) -> None:
+    def switch_vid_src(self, src_type: str, login_config: dict):
         """
         switch channel invoked by outer subprocess for frame fetch
         """
@@ -288,11 +292,17 @@ class Viewer:
         if name not in self._url_lst:
             self._url_lst.update({name: (src_type, url)})
             self.local_cams.update({name: cv2.VideoCapture(url)})
+            resolution = self._set_cam_info(self.local_cams[name])
+            
             self.threads.update({name: Thread(target=self.real_time_fetch_Main, args=(name,))})
             self.threads[name].start()
+        else:
+            resolution = self._set_cam_info(self.local_cams[name])
 
         self.src_name = name
         self.current_url = url
+
+        return resolution
 
     def flip_inter_val(self, attr: str) -> None:
         """
@@ -320,3 +330,18 @@ class Viewer:
         pth = os.path.join(folder, pfx + num + "_" + cur + sfx)
 
         return pth
+
+
+if __name__ == "__main__":
+    # 可能只能用自己的路由器
+    # url = "rtsp://admin:1234@10.180.34.124:8554/live"
+    # url = "rtsp://admin:1234@192.168.36.169:8554/live"
+    url = "rtsp://admin:1234@192.168.31.210:8554/live"
+    cap = cv2.VideoCapture(url)
+
+    while True:
+        ret, frame = cap.read()
+        cv2.imshow("frame", frame)
+        cv2.waitKey(1)
+        if not ret or cv2.waitKey(1) & 0xFF == ord("q"):
+            break

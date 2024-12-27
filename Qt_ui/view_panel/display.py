@@ -31,11 +31,21 @@ class Ui_MainWindow(QWidget):
 
         Args:
             num_cam: number of cameras,
-            frame_pa_conn: one end of pipes between main window and QThread,
-            frame_flag: conditional var for sync between main and frame_main,
-            frame_val4exec_seq: command signal,
-            num_channel: number of channel of current camera,
-            frame_buffer: output_buffer storing results with bbx,
+            video_source_choices:[
+                [<VIDEO_TYPE>, index], e.g: ['ip-cam', 1]
+            ]
+            video_source_info: 'sources' in pool.json: {
+                "ip-cam":[
+                    {
+                        "NICKNAME": xxx,
+                    }
+                ],
+                "local_vid":[
+                    {
+                        "NICKNAME": xxx,
+                    }
+                ]
+            }
         """
 
         super().__init__(parent=parent)
@@ -138,8 +148,12 @@ class Ui_MainWindow(QWidget):
         """
         slot function for switching video source
         outside each video frame: frame_win
+
+        if video source change, the button will be re-activate by signal 'switch_btn_recover_signal'
+        in frame_thread
         """
 
+        self.videoWin[id].switch_cha.setEnabled(False)
         window = vid_src_config_window(
             self,
             self.video_source_info,
@@ -151,8 +165,10 @@ class Ui_MainWindow(QWidget):
         ret, source_type, index, source_info = window.exec()
         self.video_source_info = source_info
         if ret == QDialog.DialogCode.Accepted:
-            self.video_source_choice[id] = [source_type, index]
-            self.videoWin[id].switch_cam_slot(source_type, source_info[source_type][index])
             nickname = source_info[source_type][index]["NICKNAME"]
             self.videoWin[id].groupbox.setTitle(nickname)
+            self.video_source_choice[id] = [source_type, index]
+            self.videoWin[id].switch_cam_slot(source_type, source_info[source_type][index])
             print(f"Video source of {id} changed to {source_type}: {nickname}")
+        else:
+            self.videoWin[id].switch_cha.setEnabled(True)

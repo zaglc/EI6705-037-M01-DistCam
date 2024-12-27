@@ -53,8 +53,10 @@ class Camera:
         invoke when video source change
         """
 
-        self.viewer.switch_vid_src(src_type, login_config)
+        resolution = self.viewer.switch_vid_src(src_type, login_config)
         self.controller.switch_vid_src(src_type, login_config)
+
+        return resolution
 
     def start_thread(self, frame_queue: TQueue, local_command_queue: TQueue):
         """

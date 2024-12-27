@@ -22,6 +22,7 @@ from Qt_ui.utils import (
     FV_QTHREAD_PAUSE_Q,
     FV_QTHREAD_READY_Q,
     FV_RECORD_VIDEO_Q,
+    FV_UPDATE_VID_INFO_F,
     FV_RUNNING,
     FV_STOP,
     FV_SWITCH_CHANNEL_Q,
@@ -36,7 +37,7 @@ class QThread4VideoDisplay(QThread):
     """
 
     send_signal = pyqtSignal()
-    switch_btn_recover_signal = pyqtSignal()
+    switch_btn_recover_signal = pyqtSignal(tuple)
     realtime_tab_singal = pyqtSignal(tuple)
     camera_capture_recover_signal = pyqtSignal()
 
@@ -129,6 +130,7 @@ class QThread4VideoDisplay(QThread):
             # get frame from frame_queue
             frame, (ret_status, ret_val) = self.frame_queue.get()
             drop_flag = ret_status == FV_PKGLOSS_OCCUR_F
+            update_box_json_flag = ret_status == FV_UPDATE_VID_INFO_F
 
             # trigger frame window image updating
             if not self.is_paused:
@@ -145,14 +147,13 @@ class QThread4VideoDisplay(QThread):
                 ret_cmd = FV_QTHREAD_PAUSE_Q
             elif switch_flag:
                 command_msg = vid_tuple
-                self.switch_btn_recover_signal.emit()
+                # self.switch_btn_recover_signal.emit()
                 ret_cmd = FV_SWITCH_CHANNEL_Q
             elif refresh_cam_flag:
                 ret_cmd = FV_FLIP_SIMU_STREAM_Q
             elif model_flag:
                 command_msg = model_type
                 ret_cmd = FV_FLIP_MODEL_ENABLE_Q
-                # print("Model type: ", command_msg)
             elif ctrl_flag:
                 command_msg = ctrl_info
                 ret_cmd = FV_PTZ_CTRL_Q
@@ -164,6 +165,10 @@ class QThread4VideoDisplay(QThread):
 
             time4 = time.time()
             # print(time4-time0)
+
+            # revover switch button and save box_config.json
+            if update_box_json_flag:
+                self.switch_btn_recover_signal.emit(ret_val)
 
             # trigger data table updating
             self.realtime_tab_singal.emit(

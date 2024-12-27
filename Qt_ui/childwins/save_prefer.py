@@ -2,7 +2,7 @@ import json
 import os
 import sys
 from functools import partial
-from typing import List
+from typing import List, Callable
 
 from PyQt6.QtCore import QPoint, QRect
 from PyQt6.QtCore import QRegularExpression as QRE
@@ -95,7 +95,7 @@ class ResCropWidget(QFrame):
     micro panel controlling crop box size and resolution
     """
 
-    def __init__(self, parent: QWidget, idx: int, reso: list, name: str, func) -> None:
+    def __init__(self, parent: QWidget, idx: int, reso: list, name: str, func: Callable = None) -> None:
         super().__init__(parent=parent)
         self.idx = idx
         self.step = 8
@@ -103,8 +103,10 @@ class ResCropWidget(QFrame):
         self.name = name
 
         self.lab = QPushButton(self)
-        self.lab.setText(f"Camera{idx}")
-        self.lab.clicked.connect(partial(func, idx))
+        self.lab.setText(name)
+        if func is not None:
+            self.lab.clicked.connect(partial(func, idx))
+        
         self.res_w = QLineEdit(self)
         self.res_w.setText(f"{reso[0]}")
         self.res_w.setValidator(QRegExpV(QRE(r"[0-9]{4}")))
@@ -114,6 +116,7 @@ class ResCropWidget(QFrame):
         self.class_id = QLineEdit(self)
         self.class_id.setPlaceholderText("eg: C(car)")
         self.class_id.setValidator(QRegExpV(QRE(r"[a-zA-Z0-9]{16}")))
+        
         flayout1 = QFormLayout()
         flayout1.addRow("view:", self.lab)
         flayout1.addRow("class-id:", self.class_id)
@@ -330,8 +333,12 @@ class childWindow(QDialog):
                 "apply_cbox": self.ckb3.isChecked(),
             }
         )
+    
+        sub_dicts = {}
         for idx, child in enumerate(self.rcw_lst):
-            dicts.update({self.names[idx]: child.gather_infos()})
+            sub_dicts.update({self.names[idx]: child.gather_infos()})
+
+        dicts.update({"box_list": sub_dicts})
 
         return dicts
 

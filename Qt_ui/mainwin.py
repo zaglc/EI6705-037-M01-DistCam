@@ -22,7 +22,7 @@ from Qt_ui.childwins.model_selection import ModelSelectionWindow
 from Qt_ui.ctrl_panel.ctrl_panel import ctrl_panel
 from Qt_ui.data_panel.data_table import Realtime_Datatab
 from Qt_ui.terminal_panel.output_log import terminal
-from Qt_ui.utils import RS_RUNNING, RS_STOP, RS_WAITING
+from Qt_ui.utils import RS_RUNNING, RS_STOP, RS_WAITING, BOX_JSON_PATH
 from Qt_ui.view_panel.display import Ui_MainWindow as dis_win
 
 class custom_window(QMainWindow):
@@ -365,26 +365,28 @@ class custom_window(QMainWindow):
         self._config_bak(img_lst)
 
     def _config_bak(self, img_lst=[None]):
-        if img_lst[0] is None and os.path.exists("data/temp/box_config.json"):
-            with open("data/temp/box_config.json", "r") as f:
+        if img_lst[0] is None and os.path.exists(BOX_JSON_PATH):
+            with open(BOX_JSON_PATH, "r") as f:
                 dicts = json.load(f)
                 dicts["select_path"] = os.path.join("data", self.curtime)
-            with open("data/temp/box_config.json", "w") as f:
+            with open(BOX_JSON_PATH, "w") as f:
                 json.dump(dicts, f, indent=4)
             return
 
         reso_info = [self.resolution, self.names]
         img_lst_temp = [img[0] for img in img_lst]
-        dialog = childWindow(self, self.num_cam, reso_info, img_lst_temp, "data/temp/box_config.json", self.curtime)
+        dialog = childWindow(self, self.num_cam, reso_info, img_lst_temp, BOX_JSON_PATH, self.curtime)
         dialog.preview_move_slot(dialog.preview_id)
+
+        # TODO: MAY NOT NEED EXECUTE
         ret = dialog.exec() if img_lst_temp[0] is not None else 0
         if ret == QDialog.DialogCode.Accepted or img_lst_temp[0] is None:
             dicts = dialog.gather_infos()
-            if not os.path.exists("data/temp/"):
-                os.makedirs("data/temp/")
-            with open("data/temp/box_config.json", "r") as f:
+            if not os.path.exists(os.path.dirname(BOX_JSON_PATH)):
+                os.makedirs(os.path.dirname(BOX_JSON_PATH))
+            with open(BOX_JSON_PATH, "r") as f:
                 old_dicts = json.load(f)
-            with open("data/temp/box_config.json", "w") as f:
+            with open(BOX_JSON_PATH, "w") as f:
                 old_dicts.update(dicts)
                 json.dump(old_dicts, f, indent=4)
         dialog.destroy()

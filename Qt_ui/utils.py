@@ -19,6 +19,7 @@ FV_RECORD_VIDEO_Q = 7
 FV_FLIP_SIMU_STREAM_Q = 8
 FV_FLIP_MODEL_ENABLE_Q = 9
 FV_PTZ_CTRL_Q = 10
+FV_UPDATE_VID_INFO_F = 11
 FV_QTHREAD_PAUSE_Q = 16
 
 RS_STOP = 0
@@ -29,6 +30,9 @@ FV_STOP = 0
 FV_RUNNING = 2
 
 MAX_QUEUE_WAIT_TIME = 5
+
+# path to save box_config.json
+BOX_JSON_PATH = os.path.join("data", "temp", "box_config.json")
 
 
 def generate_pos(size: tuple, num_cam: int):

@@ -1,4 +1,5 @@
 import time
+import json
 from multiprocessing import Queue
 from queue import Queue as TQueue
 
@@ -7,7 +8,9 @@ from PyQt6.QtCore import QMutex, Qt, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import QGridLayout, QGroupBox, QLabel, QPushButton, QWidget
 
+from Qt_ui.childwins.save_prefer import ResCropWidget
 from Qt_ui.threads import QThread4VideoDisplay
+from Qt_ui.utils import BOX_JSON_PATH
 
 
 class frame_win(QWidget):
@@ -145,7 +148,6 @@ class frame_win(QWidget):
             source_info (dict): info of source
         """
 
-        self.switch_cha.setEnabled(False)
         self.switch_cam_lock.lock()
         self.frame_thread.switch_flag = True
         self.frame_thread.vid_src_info_tuple = (source_type, source_info)
@@ -179,10 +181,20 @@ class frame_win(QWidget):
         if self.save_freq[0] == self.save_freq[1]:
             self.save_freq[0] = 0
 
-    def recover_switch_cam_slot(self):
+    def recover_switch_cam_slot(self, resolution: tuple):
         """
         slot function for recover switch button
         """
+
+        name = self.groupbox.title()
+        box_obj = ResCropWidget(None, self.id, list(resolution), name, None)
+        dicts = box_obj.gather_infos()
+        with open(BOX_JSON_PATH, "r") as f:
+            box_infos = json.load(f)
+
+        box_infos["box_list"].update({name: dicts})
+        with open(BOX_JSON_PATH, "w") as f:
+            json.dump(box_infos, f, indent=4)
 
         self.switch_cha.setEnabled(True)
 
