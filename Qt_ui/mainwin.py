@@ -22,7 +22,7 @@ from Qt_ui.childwins.model_selection import ModelSelectionWindow
 from Qt_ui.ctrl_panel.ctrl_panel import ctrl_panel
 from Qt_ui.data_panel.data_table import Realtime_Datatab
 from Qt_ui.terminal_panel.output_log import terminal
-from Qt_ui.utils import RS_RUNNING, RS_STOP, RS_WAITING, BOX_JSON_PATH
+from Qt_ui.utils import RS_RUNNING, RS_STOP, RS_WAITING, BOX_JSON_PATH, compute_best_size4view_panel
 from Qt_ui.view_panel.display import Ui_MainWindow as dis_win
 
 class custom_window(QMainWindow):
@@ -43,6 +43,7 @@ class custom_window(QMainWindow):
         self.resize(1500, 900)
         self.setWindowTitle("Monitor")
         ctw = QWidget(self)
+        ctw.setMinimumSize(900, 540)
         self.setCentralWidget(ctw)
         self.model_status = RS_WAITING
         self.num_cam = gpc["num_cam"]
@@ -81,9 +82,13 @@ class custom_window(QMainWindow):
         for win in self.dis.videoWin:
             win.ctrl_select_btn_signal.connect(self.ctrl_select_btn_slot)
             win.frame_thread.camera_capture_recover_signal.connect(self.camera_cap2rec_btn_recover_slot)
+        
+        # ctw has only children: scroll area; scroll area has no margin with dis
         self.scroll_area = QScrollArea(ctw)
         self.scroll_area.setWidget(self.dis)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.dis.parent_scroll_area = self.scroll_area
 
         # initializing ctrl panel
         self.ctrl_panel = ctrl_panel(
@@ -354,7 +359,6 @@ class custom_window(QMainWindow):
 
         dialog.destroy()
 
-
     def save_prefer_set_slot(self):
         img_lst = []
         for win in self.dis.videoWin:
@@ -398,7 +402,16 @@ class custom_window(QMainWindow):
 
         w, h = self.size().width(), self.size().height()
         cw, ch = self.centralWidget().size().width(), self.centralWidget().size().height()
+        if self.dis.single_view_id != -1:
+            dis_target_size = compute_best_size4view_panel(
+                self.dis.videoWin[self.dis.single_view_id],
+                self.dis.parent_ctw,
+                self.dis.parent_ctw.layout(),
+                self.dis.layout()
+            )
+            self.dis.resize(*dis_target_size)
         self.statusBar().showMessage(f"total:{w}, {h}; central:{cw}, {ch}", 30)
+        
         return super().resizeEvent(event)
 
     def closeEvent(self, event):

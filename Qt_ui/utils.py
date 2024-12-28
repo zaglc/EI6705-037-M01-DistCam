@@ -7,6 +7,7 @@ from typing import Callable
 
 import cv2
 import numpy as np
+from PyQt6.QtWidgets import QGridLayout, QWidget, QLayout
 
 # suffix 'Q' means cmd set by QThread
 # otherwise by frame main
@@ -33,6 +34,38 @@ MAX_QUEUE_WAIT_TIME = 5
 
 # path to save box_config.json
 BOX_JSON_PATH = os.path.join("data", "temp", "box_config.json")
+
+# frame window ratio
+FRAME_RATIO = 16 / 9
+
+# total zoom level
+FRAME_ZOOM_LEVEL = 10
+
+
+def compute_best_size4view_panel(inner_widget: QWidget, outer_widget:QWidget, outer_widget_layout: QLayout, middle_widget_layout: QLayout):
+    """
+    compute best size for view panel, when single view is activated
+    
+    margins exist between ctw and dis, dis and frame_win
+    ctw automatically has Layout: QVBoxLayout
+    """
+
+    left, up, right, bottom = outer_widget_layout.getContentsMargins()
+    m_left, m_up, m_right, m_bottom = middle_widget_layout.getContentsMargins()
+    inner_size = inner_widget.width(), inner_widget.height()
+    pad_x = outer_widget.width() - left - right - m_left - m_right - inner_size[0]
+    pad_y = outer_widget.height() - up - bottom - m_up - m_bottom - inner_size[1]
+    # print("inner", inner_widget.width(), inner_widget.height())
+    # print("outer", outer_widget.width(), outer_widget.height(), pad_x, pad_y)
+    
+    # expand or shrink
+    min_pad_w = min(round(pad_y * FRAME_RATIO), pad_x)
+    min_pad_h = round(min_pad_w / FRAME_RATIO)
+    target_size = (inner_size[0] + min_pad_w + m_left + m_right, inner_size[1] + min_pad_h + m_up + m_bottom)
+
+    # print("target size", target_size)
+
+    return target_size
 
 
 def generate_pos(size: tuple, num_cam: int):

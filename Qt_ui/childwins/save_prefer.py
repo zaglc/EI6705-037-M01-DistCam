@@ -283,6 +283,8 @@ class childWindow(QDialog):
         outer1.setLayout(hbox)
         outer1.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         grid.addWidget(outer1, 1, 0, 1, 3)
+
+        # TODO：向右延展而不是向下延展、
         maxi = (num_cam + 2) // 3
         pos = [
             (i + 2, j)

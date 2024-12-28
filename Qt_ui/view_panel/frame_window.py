@@ -6,12 +6,11 @@ from queue import Queue as TQueue
 import numpy as np
 from PyQt6.QtCore import QMutex, Qt, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap
-from PyQt6.QtWidgets import QGridLayout, QGroupBox, QLabel, QPushButton, QWidget
+from PyQt6.QtWidgets import QGridLayout, QGroupBox, QLabel, QPushButton, QWidget, QSizePolicy
 
 from Qt_ui.childwins.save_prefer import ResCropWidget
 from Qt_ui.threads import QThread4VideoDisplay
-from Qt_ui.utils import BOX_JSON_PATH
-
+from Qt_ui.utils import BOX_JSON_PATH, FRAME_RATIO
 
 class frame_win(QWidget):
     """
@@ -54,6 +53,7 @@ class frame_win(QWidget):
 
         self.is_selected_cap = False
         self.is_selected_ctrl = False
+        self.is_selected_single = False
         self.switching = False
         self._loc_frame_queue = TQueue()
 
@@ -62,27 +62,27 @@ class frame_win(QWidget):
         self._preview_image: QImage | None = None
         self.save_freq = [0, 50]
 
-        self.frame = QLabel(parent=parent)
+        self.frame = QLabel(parent=self)
         self.frame.setMinimumSize(*min_size)
         self.frame.setScaledContents(True)
         self.frame.setStyleSheet("QLabel{border-style: solid;border-width: 2px;border-color: rgba(0, 0, 0, 150)}")
 
         # button for capture vedio/image
-        self.capture_btn = QPushButton(parent=parent)
+        self.capture_btn = QPushButton(parent=self)
         self.capture_btn.setText("Select")
         self.capture_btn.clicked.connect(self.selected_cap_slot)
 
         # button for switch channel
-        self.switch_cha = QPushButton(parent=parent)
+        self.switch_cha = QPushButton(parent=self)
         self.switch_cha.setText("Switch")
 
         # button for PTZ control
-        self.control_btn = QPushButton(parent=parent)
+        self.control_btn = QPushButton(parent=self)
         self.control_btn.setText("Ctrl")
         self.control_btn.clicked.connect(self.selected_ctrl_slot)
 
         # button for switching to single view
-        self.single_view_btn = QPushButton(parent=parent)
+        self.single_view_btn = QPushButton(parent=self)
         self.single_view_btn.setText("View")
 
         align = Qt.AlignmentFlag.AlignCenter
@@ -198,24 +198,22 @@ class frame_win(QWidget):
 
         self.switch_cha.setEnabled(True)
 
-    # TODO: 初始高度比比例更大怎么办
+    # TODO: for debug
     def resizeEvent(self, event):
         """
         resizeEvent overload
         when size of frame_win changes, auto adjust widget label showing image
         """
 
-        # o_w = self.control_btn.width() + self.capture_btn.width() + self.switch_cha.width() + self.single_view_btn.width() + 15
-        # o_h = self.frame.height()
-        # print(f"{self.groupbox.width()}-{self.groupbox.height()}-{o_w}-{o_h}--{(self.control_btn.width()+5)*4-5}")
-        # if o_w > 1.8*o_h:
-        #     w = int(o_h * 1.8)
-        #     self.frame.setFixedWidth(w)
-        # else:
-        #     h = int(o_w / 1.8)
-        #     self.frame.setFixedWidth(o_w)
-        #     self.frame.setFixedHeight(h)
-
-        w = int(self.frame.height() * 1.8)
-        self.frame.setFixedWidth(w)
+        o_h, o_w = self.frame.height(), self.frame.width()
+        # print(f"frame {self.id} resize to {o_w}x{o_h}")
+        # print("new inner", self.width(), self.height())
+        # self.frame.is_selected_single = self.is_selected_single
+        # print(self.frame.is_selected_single)
+        # if self.is_selected_single:
+        #     if o_w / o_h > FRAME_RATIO:
+        #         o_w = round(o_h * FRAME_RATIO)
+        #     else:
+        #         o_h = round(o_w / FRAME_RATIO)
+        #     self.frame.resize(o_w, o_h)
         super().resizeEvent(event)

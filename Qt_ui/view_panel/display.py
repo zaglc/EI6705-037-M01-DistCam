@@ -3,10 +3,12 @@ from functools import partial
 from multiprocessing import Queue
 from typing import Dict, List
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QDialog, QGridLayout, QMainWindow, QStatusBar, QWidget
 
 from Qt_ui.childwins.vid_src_config import vid_src_config_window
 from Qt_ui.view_panel.frame_window import frame_win
+from Qt_ui.utils import FRAME_ZOOM_LEVEL, compute_best_size4view_panel
 
 
 class Ui_MainWindow(QWidget):
@@ -58,15 +60,19 @@ class Ui_MainWindow(QWidget):
         self.videoWin: List[frame_win] = []
         self.switch_btn_label = False
         self.single_view = False
+        self.single_view_id = -1
         self.fmin_size = (320, 180)
         self.zoom_level = 0
 
-        ctw = parent.centralWidget()
+        self.parent_ctw = parent.centralWidget()
+        self.parent_scroll_area = None
         grid = QGridLayout()
         mid = (self.num_cam + 1) // 2
+        row_expand = 1 if self.num_cam == 1 else 2
+        self._mid, self._row_expand = mid, row_expand
 
         for i in range(self.num_cam):
-            win = frame_win(i, ctw, frame_queues[i], command_queues[i], names[i], self.fmin_size)
+            win = frame_win(i, self, frame_queues[i], command_queues[i], names[i], self.fmin_size)
             switch_func = partial(self.switch_video_source_slot, i)
             win.switch_cha.clicked.connect(switch_func)
             view_func = partial(self.single_view_btn_slot, i)
@@ -74,12 +80,13 @@ class Ui_MainWindow(QWidget):
             self.videoWin.append(win)
             grid.addWidget(win, i >= mid, i % mid)
 
-        grid.setRowStretch(0, 1)
-        grid.setRowStretch(1, 1)
+        for i in range(row_expand):
+            grid.setRowStretch(i, 1)
         for i in range(mid):
             grid.setColumnStretch(i, 1)
         self.setLayout(grid)
-        self.zoom_delta = (self.fmin_size[0] // 10 * mid, self.fmin_size[1] // 10 * 2)
+        self.zoom_delta = (self.fmin_size[0] // 10 * mid, self.fmin_size[1] // 10 * row_expand)
+        self.size_buffer = (self.width(), self.height())
 
     def single_view_btn_slot(self, id: int):
         """
@@ -93,29 +100,37 @@ class Ui_MainWindow(QWidget):
             win.single_view_btn.setEnabled(self.single_view)
             win.setVisible(self.single_view)
 
-            # TODO: this btn doesn't need, but may need later
-            # if self.single_view == False:
-            #     win.frame_thread.switch_cam_lock.lock()
-            #     win.frame_thread.pause_flag = True
-            #     win.frame_thread.switch_cam_lock.unlock()
-            #     while win.frame_thread.pause_flag == True: pass
-            # else:
-            #     win.frame_thread.switch_cam_lock.lock()
-            #     win.frame_thread.Qconds.wakeOne()
-            #     win.frame_thread.switch_cam_lock.unlock()
-
         self.videoWin[id].single_view_btn.setEnabled(True)
         grid_out: QGridLayout = self.layout()
-        mid = (self.num_cam + 1) // 2
-        grid_out.setRowStretch(1 - (id // mid), int(self.single_view))
+
+        mid, row_expand = self._mid, self._row_expand
+        for i in range(row_expand):
+            if i != id // mid:
+                grid_out.setRowStretch(i, int(self.single_view))
         for i in range(mid):
             if i != id % mid:
                 grid_out.setColumnStretch(i, int(self.single_view))
 
+        self.videoWin[id].is_selected_single = not self.single_view
         if self.single_view:
             print("Switched to multi-view")
+            self.single_view_id = -1
+            self.parent_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            self.parent_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            self.parent_scroll_area.setAlignment(Qt.AlignmentFlag.AlignLeft)
+            self.resize(*self.size_buffer)
         else:
             print(f"Switched to single-view of {id}")
+            self.single_view_id = id
+            self.parent_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self.parent_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self.parent_scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            self.size_buffer = (self.width(), self.height())
+            # compute best size for Ui_MainWindow
+            target_size = compute_best_size4view_panel(self.videoWin[id], self.parent_ctw, self.parent_ctw.layout(), grid_out)
+            self.resize(*target_size)
+            
         self.single_view = not self.single_view
 
     def view_panel_zoom_in_slot(self, status: QStatusBar):
@@ -123,7 +138,9 @@ class Ui_MainWindow(QWidget):
         slot function for zoom in view panel
         """
 
-        if self.zoom_level < 9:
+        if self.single_view:
+            status.showMessage(f"Single view mode, can't zoom in", msecs=500)
+        elif self.zoom_level < FRAME_ZOOM_LEVEL - 1:
             w, h = self.width(), self.height()
             self.resize(w + self.zoom_delta[0], h + self.zoom_delta[1])
             self.zoom_level += 1
@@ -136,7 +153,9 @@ class Ui_MainWindow(QWidget):
         slot function for zoom out view panel
         """
 
-        if self.zoom_level > 0:
+        if self.single_view:
+            status.showMessage(f"Single view mode, can't zoom out", msecs=500)
+        elif self.zoom_level > 0:
             w, h = self.width(), self.height()
             self.resize(w - self.zoom_delta[0], h - self.zoom_delta[1])
             self.zoom_level -= 1

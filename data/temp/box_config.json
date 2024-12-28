@@ -1,5 +1,5 @@
 {
-    "select_path": "data\\2024-12-27_19-18-01",
+    "select_path": "data\\2024-12-28_16-27-34",
     "preview_id": 0,
     "apply_cbox": false,
     "box_list": {
@@ -119,6 +119,24 @@
             "cp_y": 0,
             "cp_w": 512,
             "cp_h": 512
+        },
+        "JH-WY1-002": {
+            "class_id": "",
+            "res_w": 1920,
+            "res_h": 1080,
+            "cp_x": 0,
+            "cp_y": 0,
+            "cp_w": 512,
+            "cp_h": 512
+        },
+        "XiaoMi-14-Pro": {
+            "class_id": "",
+            "res_w": 640,
+            "res_h": 360,
+            "cp_x": 0,
+            "cp_y": 0,
+            "cp_w": 512,
+            "cp_h": 360
         }
     }
 }
