@@ -78,7 +78,7 @@ class ModelSelectionWindow(QDialog):
 
 
 if __name__ == "__main__":
-    with open(os.path.join("configs", "model_config.json"), "r") as f:
+    with open(os.path.join("configs", "model_cfgs", "model_config.json"), "r") as f:
         model_list = json.load(f)
 
     app = QApplication(sys.argv)

@@ -48,7 +48,9 @@ class Engine:
                 torch_model = torch.load(weight, map_location=self.device)
                 model.load_state_dict(torch_model["model"], strict=False)
                 # print("Warning: failed load model, try again using relaxed mode")
-                model.to(self.device).eval()    
+                model.to(self.device).eval()
+                # with torch.no_grad():
+                #     model(torch.zeros(1, 3, img_size, img_size).to(self.device), augment=False)
             elif model_type == YOLOV11_TRACK:
                 weight = self.model_config[model_type]['weight']
                 img_size = self.model_config[model_type]['img_size']
@@ -69,7 +71,7 @@ class Engine:
         self.model = self.model_pool[self.type]
         results = None
         if self.type == YOLOV3_DETECT:
-            pred = self.model(chunk_tsr, **kwargs)[0]
+            pred = self.model(chunk_tsr.to(self.device), **kwargs)[0]
             pred = pred.clone().detach().cpu()
             results = non_max_suppression(pred, conf_thres=0.2, iou_thres=0.4, multi_label=False)
         elif self.type == YOLOV11_TRACK:
@@ -113,8 +115,7 @@ def preprocess_img(ori_img: np.ndarray, model_config: dict, type: str, device: s
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to bsx3x416x416
         img = np.ascontiguousarray(img)
 
-        img = torch.from_numpy(img).to(device)
-
+        img = torch.from_numpy(img)# .to(device)
         img = img.float() / 255.0
     else:
         img = img

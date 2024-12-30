@@ -141,6 +141,14 @@ class vid_src_config_window(QDialog):
                 qline.setText(v)
             else:
                 qline.setPlaceholderText("enter content")
+
+            if k == "NICKNAME":
+                qline.setValidator(QRegExpV(QRE(r"[a-zA-Z0-9_]")))
+            elif k == "IP":
+                qline.setValidator(QRegExpV(QRE(r"[\dx]{1,3}\.[\dx]{1,3}\.[\dx]{1,3}\.[\dx]{1,3}")))
+            elif k == "PORT" or k == "CHANNEL":
+                qline.setValidator(QRegExpV(QRE(r"\d{1,5}")))
+            
             self.flayout.addRow(k, qline)
         self.buttonBox.button(QDialogButtonBox.StandardButton.Apply).setEnabled(False)
 
@@ -197,7 +205,7 @@ class vid_src_config_window(QDialog):
 
 
 if __name__ == "__main__":
-    with open(os.path.join("configs", "video_source_pool.json"), "r") as f:
+    with open(os.path.join("configs", "video_source_cfgs", "video_source_pool.json"), "r") as f:
         vid_srcs = json.load(f)
 
     app = QApplication(sys.argv)

@@ -10,7 +10,10 @@ from typing import List
 
 import numpy as np
 import torch
+import setproctitle
 from PyQt6.QtWidgets import QApplication
+import qdarkstyle
+from qdarkstyle.light.palette import LightPalette
 
 from central_monitor.camera_top import Camera
 from Qt_ui.mainwin import custom_window
@@ -33,6 +36,8 @@ from Qt_ui.utils import (
     Stream,
     gpc_stream,
     safe_get,
+    MODEL_JSON_PATH,
+    VIDEO_SOURCE_POOL_PATH,
 )
 from running_models.extern_model import (
     initialize_model_engine,
@@ -53,6 +58,7 @@ def model_Main(
     data_queue: Queue,
     result_queue: List[Queue],
     stream: Stream,
+    debug: bool,
 ) -> None:
     """
     process for model inference
@@ -61,7 +67,9 @@ def model_Main(
     def quit_func():
         sys.stdout = sys.__stdout__
 
-    # sys.stdout = stream
+    setproctitle.setproctitle(f"MODEL {ddp_id}")
+    if not debug:
+        sys.stdout = stream
     stream._add_item(os.getpid(), f"MODEL {ddp_id}")
 
     # model loading and cuda memory pre-allocating
@@ -88,6 +96,7 @@ def model_Main(
                 break
             else:
                 try:
+                    # data stuck not exist here
                     new_data = data_queue.get(timeout=WAITING_TIME)
                     (vid_id, running_status, tsr, data_model_request) = new_data
 
@@ -106,15 +115,16 @@ def model_Main(
                     break
 
         # no matter which frame submit data, inference will be executed when enough data is collected
+        # TODO: this part is MEMORY intensive
         if fetch > 0:
             # all are v3, v11
-            if set(model_type_lst) == 1:
+            if len(set(model_type_lst)) == 1:
                 model.set_model(model_type_lst[0])
                 if model_type_lst[0] == YOLOV11_TRACK:
                     chunk_tsr = tsr_lst
                 else:
                     chunk_tsr = torch.stack(tsr_lst, dim=0)
-                    chunk_tsr = chunk_tsr.to(device=inference_device)
+                    # chunk_tsr = chunk_tsr.to(device=inference_device)
                 results = model(chunk_tsr, augment=False)
             # process each one respectively for type discrepancy
             else:
@@ -122,7 +132,7 @@ def model_Main(
                 for i in range(fetch):
                     model.set_model(model_type_lst[i])
                     if model_type_lst[i] == YOLOV3_DETECT:
-                        chunk_tsr = tsr_lst[i].unsqueeze(0).to(device=inference_device)
+                        chunk_tsr = tsr_lst[i].unsqueeze(0)
                     else:
                         chunk_tsr = tsr_lst[i]
                     result = model(chunk_tsr, augment=False)[0]
@@ -151,13 +161,16 @@ def frame_Main(
     data_queue: Queue,  # frame_main, main -> model_main
     result_queue: Queue,  # model_main -> frame_main
     stream: Stream,
+    debug: bool,
 ) -> None:
     """
     process for image display
     """
 
+    setproctitle.setproctitle(f"FRAME {camera.id}")
     # start thread which continously reading videocapture
-    # sys.stdout = stream
+    if not debug:
+        sys.stdout = stream
     stream._add_item(os.getpid(), f"FRAME {camera.id}")
     classes, colors = result_queue.get()
 
@@ -256,12 +269,13 @@ def frame_Main(
     sys.stdout = sys.__stdout__
 
 
-def initialize(file: str, num_cam: int, model_config: str):
+def initialize(file: str, num_cam: int, model_config: str, log_file: bool, debug: bool):
     """
     initial all things from config file
     """
 
-    # sys.stdout = gpc_stream
+    if not debug:
+        sys.stdout = gpc_stream
     gpc_stream._add_item(os.getpid(), "MAIN")
 
     with open(file, "r") as f:
@@ -305,11 +319,15 @@ def initialize(file: str, num_cam: int, model_config: str):
                     data_queues[ddp_idx],
                     result_queues[ddp_idx * length : (ddp_idx + 1) * length],
                     gpc_stream,
+                    debug,
                 ),
+                name=f"model_{ddp_idx}",
             )
         )
 
     for cam_idx in range(num_cam):
+        process = Process()
+        process.name
         cam_pool.append(
             Process(
                 target=frame_Main,
@@ -322,7 +340,9 @@ def initialize(file: str, num_cam: int, model_config: str):
                     data_queues[cam_idx // length],
                     result_queues[cam_idx],
                     gpc_stream,
+                    debug,
                 ),
+                name=f"frame_{cam_idx}",
             )
         )
 
@@ -339,6 +359,7 @@ def initialize(file: str, num_cam: int, model_config: str):
         "pool": cam_pool,
         "current_chosen_video_source": default,
         "video_source_info_lst": srcs,
+        "log": log_file,
     }
 
     return ret
@@ -347,17 +368,22 @@ def initialize(file: str, num_cam: int, model_config: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="arguments for main process")
     parser.add_argument("-n", "--num_cam", type=int, default=1, help="number of cameras to be monitored")
-    parser.add_argument("-v", "--video_config",  type=str, default=os.path.join("configs","video_source_pool.json"), help="Path to the json file of video source pool")
-    parser.add_argument("-m", "--model_config",  type=str, default=os.path.join("configs","model_config.json"), help="Path to the json file of model config")
+    parser.add_argument("-v", "--video_config",  type=str, default=VIDEO_SOURCE_POOL_PATH, help="Path to the json file of video source pool")
+    parser.add_argument("-m", "--model_config",  type=str, default=MODEL_JSON_PATH, help="Path to the json file of model config")
+    parser.add_argument("-l", "--log_file", default=True, action="store_false", help="enable logging")
+    parser.add_argument("-d", "--debug", default=False, action="store_true", help="debug mode")
     args = parser.parse_args()
 
-    num_cam      = args.num_cam
+    num_cam = args.num_cam
     model_config = args.model_config
     video_config = args.video_config
-    gpc = initialize(video_config, num_cam, model_config)
+    log_file = args.log_file
+    debug = args.debug
+    gpc = initialize(video_config, num_cam, model_config, log_file, debug)
     try:
         app = QApplication(sys.argv)
         MainWindow = custom_window(gpc)
+        app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt6', palette=LightPalette()))
         MainWindow.show()
         ret = app.exec()
     except Exception as e:

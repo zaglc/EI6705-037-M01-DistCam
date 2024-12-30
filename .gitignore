@@ -2,7 +2,7 @@
 
 *__pycache__
 
-yolov3
+*yolov3*
 
 2023*
 2024*
@@ -15,3 +15,5 @@ yolov3
 *Jackson-Hole-WY2*
 
 *.pptx
+
+*_temp.json

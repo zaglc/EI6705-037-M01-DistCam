@@ -22,7 +22,10 @@ from Qt_ui.childwins.model_selection import ModelSelectionWindow
 from Qt_ui.ctrl_panel.ctrl_panel import ctrl_panel
 from Qt_ui.data_panel.data_table import Realtime_Datatab
 from Qt_ui.terminal_panel.output_log import terminal
-from Qt_ui.utils import RS_RUNNING, RS_STOP, RS_WAITING, BOX_JSON_PATH, compute_best_size4view_panel
+from Qt_ui.utils import (
+    RS_RUNNING, RS_STOP, RS_WAITING, BOX_JSON_PATH, MODEL_JSON_PATH, VIDEO_SOURCE_POOL_PATH, 
+    compute_best_size4view_panel
+)
 from Qt_ui.view_panel.display import Ui_MainWindow as dis_win
 
 class custom_window(QMainWindow):
@@ -59,7 +62,8 @@ class custom_window(QMainWindow):
 
         self.pool = gpc["pool"]
         self.streaming = False
-        self.curtime = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        curtime = datetime.datetime.now()
+        self.curtime = curtime.strftime("%Y-%m-%d_%H-%M-%S")
 
         # initializing other content
         self.resolution: List[list] = []
@@ -107,7 +111,7 @@ class custom_window(QMainWindow):
             win.frame_thread.realtime_tab_singal.connect(self.update_realtime_tab_slot)
         self.addToolBar(Qt.ToolBarArea.BottomToolBarArea, self.data_panel)
 
-        self.terminal_panel = terminal(self.centralWidget())
+        self.terminal_panel = terminal(self.centralWidget(), curtime=curtime, need_log=gpc["log"])
         self.addToolBar(Qt.ToolBarArea.BottomToolBarArea, self.terminal_panel)
 
         # 修改grid，以后还要改
@@ -118,7 +122,7 @@ class custom_window(QMainWindow):
 
         # intitializing menubar
         self._init_meunbar()
-        # self.terminal_panel.redirect_stdout_slot("")
+        self.terminal_panel.redirect_stdout_slot("")
 
     def _init_meunbar(self):
         self.setStatusBar(QStatusBar(self))
@@ -360,6 +364,10 @@ class custom_window(QMainWindow):
         dialog.destroy()
 
     def save_prefer_set_slot(self):
+        """
+        slot function for clicking save preference button
+        """
+
         img_lst = []
         for win in self.dis.videoWin:
             win._lock.lock()
@@ -368,12 +376,19 @@ class custom_window(QMainWindow):
 
         self._config_bak(img_lst)
 
-    def _config_bak(self, img_lst=[None]):
-        if img_lst[0] is None and os.path.exists(BOX_JSON_PATH):
-            with open(BOX_JSON_PATH, "r") as f:
+    def _config_bak(self, img_lst=[None], save_temp_file=True):
+
+        load_pth, save_pth = BOX_JSON_PATH, BOX_JSON_PATH
+        if save_temp_file and not BOX_JSON_PATH.endswith("_temp.json"):
+            save_pth = save_pth.replace(".json", "_temp.json")
+            if os.path.exists(save_pth):
+                load_pth = save_pth
+
+        if img_lst[0] is None and os.path.exists(load_pth):
+            with open(load_pth, "r") as f:
                 dicts = json.load(f)
                 dicts["select_path"] = os.path.join("data", self.curtime)
-            with open(BOX_JSON_PATH, "w") as f:
+            with open(save_pth, "w") as f:
                 json.dump(dicts, f, indent=4)
             return
 
@@ -386,13 +401,14 @@ class custom_window(QMainWindow):
         ret = dialog.exec() if img_lst_temp[0] is not None else 0
         if ret == QDialog.DialogCode.Accepted or img_lst_temp[0] is None:
             dicts = dialog.gather_infos()
-            if not os.path.exists(os.path.dirname(BOX_JSON_PATH)):
-                os.makedirs(os.path.dirname(BOX_JSON_PATH))
-            with open(BOX_JSON_PATH, "r") as f:
+            if not os.path.exists(os.path.dirname(load_pth)):
+                os.makedirs(os.path.dirname(load_pth))
+            with open(load_pth, "r") as f:
                 old_dicts = json.load(f)
-            with open(BOX_JSON_PATH, "w") as f:
+            with open(save_pth, "w") as f:
                 old_dicts.update(dicts)
                 json.dump(old_dicts, f, indent=4)
+
         dialog.destroy()
 
     def resizeEvent(self, event):
@@ -417,14 +433,30 @@ class custom_window(QMainWindow):
     def closeEvent(self, event):
         """
         overload closeEvent, new sequences are as follow:
+            0. save model_cfg and video_src_cfg
             1. stop QThread of each frame
             2. stop subprocess: model*ddp(2), frame*cam_num(6), ctrl(1)
             3. stop main process
         """
 
+        # save configs
+        model_cfg_save_pth = MODEL_JSON_PATH
+        if not MODEL_JSON_PATH.endswith("_temp.json"):
+            model_cfg_save_pth = model_cfg_save_pth.replace(".json", "_temp.json")
+        with open(model_cfg_save_pth, "w") as f:
+            json.dump(self.model_config, f, indent=4)
+
+        video_src_pool_pth = VIDEO_SOURCE_POOL_PATH
+        if not VIDEO_SOURCE_POOL_PATH.endswith("_temp.json"):
+            video_src_pool_pth = video_src_pool_pth.replace(".json", "_temp.json")
+        infos = [self.dis.video_source_choice, self.dis.video_source_info]
+        infos[0] = [[ii[0], infos[1][ii[0]][ii[1]]["NICKNAME"]] for ii in infos[0]]
+        with open(video_src_pool_pth, "w") as f:
+            json.dump({"choices": infos[0], "sources": infos[1]}, f, indent=4)
+
+        # pass quit flag to Qthreads
         for idx, win in enumerate(self.dis.videoWin):
             win.frame_thread.is_running = False
-        self.terminal_panel.std_thread.is_running = False
 
         # pass quit flag to sub-processes
         for queue in self.data_queues:
@@ -435,5 +467,6 @@ class custom_window(QMainWindow):
         for idx, child in enumerate(self.pool):
             child.join()
 
+        self.terminal_panel.std_thread.is_running = False
         sys.stdout = sys.__stdout__
         super().closeEvent(event)

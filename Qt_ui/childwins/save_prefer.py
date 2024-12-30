@@ -50,7 +50,7 @@ class preview_win(QLabel):
         self.cbox_size = [0, 0]
         self.cbox_delta = [0, 0]
         self.full_size = [self.width(), self.height()]
-        self.cropbox.setStyleSheet("QLabel{border-style: solid;border-width: 1px;border-color: rgba(240, 45, 32, 150)}")
+        self.cropbox.setStyleSheet("QLabel{border-style: solid;border-width: 1px;border-color: rgba(240, 45, 32, 150);background-color: transparent}")
 
     def _update_cbox(self, new_val: dict):
         """

@@ -175,6 +175,7 @@ class Viewer:
                 cam.grab()
 
             ret, frame = cam.retrieve()
+            # print("retrive")
             if not ret:
                 print(f"Camera {name} is still not working after reconnect")
                 raise RuntimeError()
@@ -200,9 +201,9 @@ class Viewer:
                 cv2.imwrite(pic_pth, img_save)
                 print(
                     f"""picture saving info:
-                      \tcamera code  :\t{name}
-                      \tsave path    :\t{pic_pth.replace(self.capture_path,"")[1:]}
-                      \tresolution   :\t{final_size}\n""",
+                        camera code:   {name}
+                        save path:     {pic_pth.replace(self.capture_path,"")[1:]}
+                        resolution:    {final_size}""",
                     end="",
                 )
                 self.flip_inter_val("need_capture")
@@ -230,18 +231,18 @@ class Viewer:
                 self.videoWriter.release()
                 print(
                     f"""video saving info:
-                      \tcamera code  :\t{name}
-                      \tsave path    :\t{vid_pth.replace(self.capture_path,"")[1:]}
-                      \ttotal frame  :\t{vid_frame_cnt}
-                      \tresolution   :\t{final_size}
-                      \tactual time  :\t{strftime('%H:%M:%S',gmtime(vid_frame_cnt/self.fps))}\n""",
+                      \tcamera code:  {name}
+                      \tsave path:    {vid_pth.replace(self.capture_path,"")[1:]}
+                      \ttotal frame:  {vid_frame_cnt}
+                      \tresolution:   {final_size}
+                      \tactual time:  {strftime('%H:%M:%S',gmtime(vid_frame_cnt/self.fps))}""",
                     end="",
                 )
 
             # report pkg loss if the buffer is full and write image
             if name == self.src_name:
                 if self.frame_queue.qsize() >= self.max_buffer_size:
-                    _ = self.frame_queue.get()
+                    self.frame_queue.get()
                     self.package_loss = 1
                 else:
                     self.package_loss = 0

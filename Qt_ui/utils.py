@@ -33,7 +33,19 @@ FV_RUNNING = 2
 MAX_QUEUE_WAIT_TIME = 5
 
 # path to save box_config.json
-BOX_JSON_PATH = os.path.join("data", "temp", "box_config.json")
+BOX_JSON_PATH = os.path.join("configs", "crop_box_cfgs", "box_config_temp.json")
+if not os.path.exists(BOX_JSON_PATH):
+    BOX_JSON_PATH = BOX_JSON_PATH.replace("box_config_temp", "box_config")
+
+# path to load model_config.json
+MODEL_JSON_PATH = os.path.join("configs", "model_cfgs", "model_config_temp.json")
+if not os.path.exists(MODEL_JSON_PATH):
+    MODEL_JSON_PATH = MODEL_JSON_PATH.replace("model_config_temp", "model_config")
+
+# path to load video source pool
+VIDEO_SOURCE_POOL_PATH = os.path.join("configs", "video_source_cfgs", "video_source_pool_temp.json")
+if not os.path.exists(VIDEO_SOURCE_POOL_PATH):
+    VIDEO_SOURCE_POOL_PATH = VIDEO_SOURCE_POOL_PATH.replace("video_source_pool_temp", "video_source_pool")
 
 # frame window ratio
 FRAME_RATIO = 16 / 9
@@ -114,7 +126,7 @@ class Stream:
     Adopt from https://blog.csdn.net/quay_sue/article/details/133841837
 
     log format:
-    [MODEL/FRAME/CTRL x at time]: (content...)
+    [time] [process] content, separate by '\t'
 
     """
 
@@ -125,7 +137,6 @@ class Stream:
 
     def write(self, text: str) -> None:
         pid = os.getpid()
-        curtime = datetime.datetime.now().strftime("%H:%M:%S")
         try:
             name = self.proc_table[pid]
         except:
@@ -133,7 +144,7 @@ class Stream:
 
         # python `print` will invoke this method causing `end` is not None
         if len(text) > 2:
-            new_text = f"[{name} at {curtime}]: " + text + "\n"
+            new_text = f"{name}@" + text
         else:
             new_text = text
 

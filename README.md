@@ -81,3 +81,9 @@ video source file located at `configs/video_source_pool.json`, the hierarchy of 
 ## PREVIEW 
 + v2: ![local](doc/figs/layout/v2.png) 
 + v3: ![local](doc/figs/layout/v3.PNG) 
+
+## FUNC
+<video width="816" height="438" controls>
+  <source src="doc/figs/function/full_view.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
