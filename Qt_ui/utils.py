@@ -7,7 +7,7 @@ from typing import Callable
 
 import cv2
 import numpy as np
-from PyQt6.QtWidgets import QGridLayout, QWidget, QLayout
+from PyQt6.QtWidgets import QGridLayout, QLayout, QWidget
 
 # suffix 'Q' means cmd set by QThread
 # otherwise by frame main
@@ -54,10 +54,12 @@ FRAME_RATIO = 16 / 9
 FRAME_ZOOM_LEVEL = 10
 
 
-def compute_best_size4view_panel(inner_widget: QWidget, outer_widget:QWidget, outer_widget_layout: QLayout, middle_widget_layout: QLayout):
+def compute_best_size4view_panel(
+    inner_widget: QWidget, outer_widget: QWidget, outer_widget_layout: QLayout, middle_widget_layout: QLayout
+):
     """
     compute best size for view panel, when single view is activated
-    
+
     margins exist between ctw and dis, dis and frame_win
     ctw automatically has Layout: QVBoxLayout
     """
@@ -69,7 +71,7 @@ def compute_best_size4view_panel(inner_widget: QWidget, outer_widget:QWidget, ou
     pad_y = outer_widget.height() - up - bottom - m_up - m_bottom - inner_size[1]
     # print("inner", inner_widget.width(), inner_widget.height())
     # print("outer", outer_widget.width(), outer_widget.height(), pad_x, pad_y)
-    
+
     # expand or shrink
     min_pad_w = min(round(pad_y * FRAME_RATIO), pad_x)
     min_pad_h = round(min_pad_w / FRAME_RATIO)

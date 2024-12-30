@@ -294,7 +294,7 @@ class Viewer:
             self._url_lst.update({name: (src_type, url)})
             self.local_cams.update({name: cv2.VideoCapture(url)})
             resolution = self._set_cam_info(self.local_cams[name])
-            
+
             self.threads.update({name: Thread(target=self.real_time_fetch_Main, args=(name,))})
             self.threads[name].start()
         else:

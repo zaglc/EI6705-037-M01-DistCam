@@ -9,10 +9,10 @@ from queue import Queue as TQueue
 from typing import List
 
 import numpy as np
-import torch
-import setproctitle
-from PyQt6.QtWidgets import QApplication
 import qdarkstyle
+import setproctitle
+import torch
+from PyQt6.QtWidgets import QApplication
 from qdarkstyle.light.palette import LightPalette
 
 from central_monitor.camera_top import Camera
@@ -30,21 +30,21 @@ from Qt_ui.utils import (
     FV_STOP,
     FV_SWITCH_CHANNEL_Q,
     FV_UPDATE_VID_INFO_F,
+    MODEL_JSON_PATH,
     RS_RUNNING,
     RS_STOP,
     RS_WAITING,
+    VIDEO_SOURCE_POOL_PATH,
     Stream,
     gpc_stream,
     safe_get,
-    MODEL_JSON_PATH,
-    VIDEO_SOURCE_POOL_PATH,
 )
 from running_models.extern_model import (
+    YOLOV3_DETECT,
+    YOLOV11_TRACK,
     initialize_model_engine,
     preprocess_img,
     process_result,
-    YOLOV11_TRACK,
-    YOLOV3_DETECT
 )
 
 WAITING_TIME = 0.01
@@ -83,12 +83,13 @@ def model_Main(
     while True:
         # if model inference is needed, data to be inferenced will be in data_queue
         # rank-0 send start and end signal
-        fetch, tsr_lst, sender_lst, model_type_lst = 0, [], [], []
+        fetch, tsr_lst, sender_lst, model_type_lst, conf_thre_lst, iou_thre_lst = 0, [], [], [], [], []
+        selected_class_lst = []
 
         while fetch < batch:
             if running_status == RS_WAITING:
                 new_data = data_queue.get()
-                (vid_id, running_status, _, data_model_request) = new_data
+                (vid_id, running_status, _, (data_model_request, selected_class, conf_thre, iou_thre)) = new_data
 
             if running_status == RS_WAITING:
                 continue
@@ -98,13 +99,16 @@ def model_Main(
                 try:
                     # data stuck not exist here
                     new_data = data_queue.get(timeout=WAITING_TIME)
-                    (vid_id, running_status, tsr, data_model_request) = new_data
+                    (vid_id, running_status, tsr, (data_model_request, selected_class, conf_thre, iou_thre)) = new_data
 
                     if running_status == RS_RUNNING:
                         if tsr is not None:
                             tsr_lst.append(tsr)
                             sender_lst.append(vid_id)
                             model_type_lst.append(data_model_request)
+                            conf_thre_lst.append(conf_thre)
+                            iou_thre_lst.append(iou_thre)
+                            selected_class_lst.append(selected_class)
                             fetch += 1
                     else:
                         size = data_queue.qsize()
@@ -119,7 +123,7 @@ def model_Main(
         if fetch > 0:
             # all are v3, v11
             if len(set(model_type_lst)) == 1:
-                model.set_model(model_type_lst[0])
+                model.set_model(model_type_lst[0], conf_thre_lst[0], iou_thre_lst[0], selected_class_lst[0])
                 if model_type_lst[0] == YOLOV11_TRACK:
                     chunk_tsr = tsr_lst
                 else:
@@ -130,7 +134,7 @@ def model_Main(
             else:
                 results = []
                 for i in range(fetch):
-                    model.set_model(model_type_lst[i])
+                    model.set_model(model_type_lst[i], conf_thre_lst[i], iou_thre_lst[i], selected_class_lst[0])
                     if model_type_lst[i] == YOLOV3_DETECT:
                         chunk_tsr = tsr_lst[i].unsqueeze(0)
                     else:
@@ -154,8 +158,6 @@ def model_Main(
 
 def frame_Main(
     camera: Camera,
-    inference_device: str,
-    model_config: dict,
     frame_write_queue: Queue,  # main -> frame_main
     command_read_queue: Queue,  # frame_main -> main
     data_queue: Queue,  # frame_main, main -> model_main
@@ -180,6 +182,11 @@ def frame_Main(
     frame_write_queue.put((camera.resolution, camera.name))
 
     model_type = "None"
+    img_size = None
+    iou_thre = None
+    conf_thre = None
+    selected_class = None
+    is_active = None
 
     model_run = RS_WAITING
     ret_status = FV_FRAME_PROC_READY_F
@@ -202,13 +209,13 @@ def frame_Main(
         else:
             ret_val_main = None
             ret_status = FV_FRAME_PROC_READY_F
-        
+
         if model_run == RS_RUNNING:
-            tsr = preprocess_img(frame, model_config, model_type, device=inference_device)
-            data_queue.put((camera.id, model_run, tsr, model_type))
+            tsr = preprocess_img(frame, img_size, model_type)
+            data_queue.put((camera.id, model_run, tsr, (model_type, selected_class, conf_thre, iou_thre)))
             try:
-                (result,) = result_queue.get(timeout=WAITING_TIME*100) # Large but not blocking in case of deadlock
-                frame = process_result(frame, result, classes, colors, model_config, model_type)
+                (result,) = result_queue.get(timeout=WAITING_TIME * 100)  # Large but not blocking in case of deadlock
+                frame = process_result(frame, result, classes, colors, img_size, model_type, selected_class)
             except Empty:
                 pass
 
@@ -229,13 +236,13 @@ def frame_Main(
         if frame_status == FV_RUNNING:
             # get some commands needed by current cycle
             # TODO: set button enable/disable for these functions
-            need_switch  = cmd == FV_SWITCH_CHANNEL_Q
+            need_switch = cmd == FV_SWITCH_CHANNEL_Q
             need_capture = cmd == FV_CAPTURE_IMAGE_Q
-            need_record  = cmd == FV_RECORD_VIDEO_Q
+            need_record = cmd == FV_RECORD_VIDEO_Q
             need_refresh = cmd == FV_FLIP_SIMU_STREAM_Q
-            need_model   = cmd == FV_FLIP_MODEL_ENABLE_Q
-            need_pause   = cmd == FV_QTHREAD_PAUSE_Q
-            need_ctrl    = cmd == FV_PTZ_CTRL_Q
+            need_model = cmd == FV_FLIP_MODEL_ENABLE_Q
+            need_pause = cmd == FV_QTHREAD_PAUSE_Q
+            need_ctrl = cmd == FV_PTZ_CTRL_Q
 
             if need_pause:
                 camera.viewer.flip_inter_val("need_send")
@@ -244,10 +251,10 @@ def frame_Main(
             elif need_refresh:
                 camera.viewer.flip_inter_val("simu_stream")
             elif need_model:
-                model_type = cmd_val
-                model_run  = RS_WAITING if model_type == "None" else RS_RUNNING
+                model_type, is_active, img_size, selected_class, conf_thre, iou_thre = cmd_val
+                model_run = RS_WAITING if not is_active else RS_RUNNING
                 strr = "enabled" if model_run == RS_RUNNING else "disabled"
-                print(f"model inference {strr} with model {model_type}", end=None)
+                print(f"model inference {strr} with model {model_type}, input size {img_size}", end=None)
             elif need_capture:  # TODO: viewer自己把图片存好后翻转
                 camera.viewer.flip_inter_val("need_capture")
             elif need_record:
@@ -333,8 +340,6 @@ def initialize(file: str, num_cam: int, model_config: str, log_file: bool, debug
                 target=frame_Main,
                 args=(
                     camera_lst[cam_idx],
-                    inference_device,
-                    model_config_dict,
                     frame_write_queues[cam_idx],
                     command_queues[cam_idx],
                     data_queues[cam_idx // length],
@@ -368,8 +373,16 @@ def initialize(file: str, num_cam: int, model_config: str, log_file: bool, debug
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="arguments for main process")
     parser.add_argument("-n", "--num_cam", type=int, default=1, help="number of cameras to be monitored")
-    parser.add_argument("-v", "--video_config",  type=str, default=VIDEO_SOURCE_POOL_PATH, help="Path to the json file of video source pool")
-    parser.add_argument("-m", "--model_config",  type=str, default=MODEL_JSON_PATH, help="Path to the json file of model config")
+    parser.add_argument(
+        "-v",
+        "--video_config",
+        type=str,
+        default=VIDEO_SOURCE_POOL_PATH,
+        help="Path to the json file of video source pool",
+    )
+    parser.add_argument(
+        "-m", "--model_config", type=str, default=MODEL_JSON_PATH, help="Path to the json file of model config"
+    )
     parser.add_argument("-l", "--log_file", default=True, action="store_false", help="enable logging")
     parser.add_argument("-d", "--debug", default=False, action="store_true", help="debug mode")
     args = parser.parse_args()
@@ -383,7 +396,7 @@ if __name__ == "__main__":
     try:
         app = QApplication(sys.argv)
         MainWindow = custom_window(gpc)
-        app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt6', palette=LightPalette()))
+        app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api="pyqt6", palette=LightPalette()))
         MainWindow.show()
         ret = app.exec()
     except Exception as e:

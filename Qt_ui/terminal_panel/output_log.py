@@ -53,7 +53,7 @@ class terminal(QToolBar):
         """
 
         def _add_html_color_tag(text: str, color: str) -> str:
-            
+
             return f"<font color={color}>{text}</font>"
 
         if text != "" and text != "\n":
@@ -74,7 +74,7 @@ class terminal(QToolBar):
                     rows = t.split("\n")
                     for idx, tt in enumerate(rows):
                         if idx != 0:
-                            cursor.insertText("\t"*2)
+                            cursor.insertText("\t" * 2)
                         cursor.insertHtml(_add_html_color_tag(tt, "black"))
                         cursor.insertText("\n")
 
@@ -83,4 +83,4 @@ class terminal(QToolBar):
 
             if self.need_log:
                 with open(os.path.join(self.log_dir, self.log_fn), "a") as f:
-                    f.write(text.replace("@", "\t")+"\n")
+                    f.write(text.replace("@", "\t") + "\n")

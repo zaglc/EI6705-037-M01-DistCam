@@ -87,3 +87,7 @@ video source file located at `configs/video_source_pool.json`, the hierarchy of 
   <source src="doc/figs/function/full_view.mp4" type="video/mp4">
   Your browser does not support the video tag.
 </video>
+
++ new model selection window
+ 
+  ![local](doc/figs/layout/model_sel_new.PNG) 

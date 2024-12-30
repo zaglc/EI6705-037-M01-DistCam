@@ -2,7 +2,7 @@ import json
 import os
 import sys
 from functools import partial
-from typing import List, Callable
+from typing import Callable, List
 
 from PyQt6.QtCore import QPoint, QRect
 from PyQt6.QtCore import QRegularExpression as QRE
@@ -50,7 +50,9 @@ class preview_win(QLabel):
         self.cbox_size = [0, 0]
         self.cbox_delta = [0, 0]
         self.full_size = [self.width(), self.height()]
-        self.cropbox.setStyleSheet("QLabel{border-style: solid;border-width: 1px;border-color: rgba(240, 45, 32, 150);background-color: transparent}")
+        self.cropbox.setStyleSheet(
+            "QLabel{border-style: solid;border-width: 1px;border-color: rgba(240, 45, 32, 150);background-color: transparent}"
+        )
 
     def _update_cbox(self, new_val: dict):
         """
@@ -106,7 +108,7 @@ class ResCropWidget(QFrame):
         self.lab.setText(name)
         if func is not None:
             self.lab.clicked.connect(partial(func, idx))
-        
+
         self.res_w = QLineEdit(self)
         self.res_w.setText(f"{reso[0]}")
         self.res_w.setValidator(QRegExpV(QRE(r"[0-9]{4}")))
@@ -116,7 +118,7 @@ class ResCropWidget(QFrame):
         self.class_id = QLineEdit(self)
         self.class_id.setPlaceholderText("eg: C(car)")
         self.class_id.setValidator(QRegExpV(QRE(r"[a-zA-Z0-9]{16}")))
-        
+
         flayout1 = QFormLayout()
         flayout1.addRow("view:", self.lab)
         flayout1.addRow("class-id:", self.class_id)
@@ -335,7 +337,7 @@ class childWindow(QDialog):
                 "apply_cbox": self.ckb3.isChecked(),
             }
         )
-    
+
         sub_dicts = {}
         for idx, child in enumerate(self.rcw_lst):
             sub_dicts.update({self.names[idx]: child.gather_infos()})
@@ -384,21 +386,30 @@ class childWindow(QDialog):
 # unit test
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    o = [
+        [1920, 1080, "0"],
+        [1920, 1080, "1"],
+        [1920, 1080, "2"],
+        [2560, 1440, "3"],
+        [2688, 1520, "4"],
+        [2688, 1520, "5"],
+    ]
     testwin = childWindow(
         None,
         6,
-        [[1920, 1080, 0], [1920, 1080, 0], [1920, 1080, 0], [2560, 1440, 0], [2688, 1520, 0], [2688, 1520, 0]],
+        [[[elm[0], elm[1]] for elm in o], [elm[2] for elm in o]],
         [None],
-        "data/temp/box_config.json",
+        "configs/crop_box_cfgs/box_config.json",
     )  # ["doc/figs/"+f for f in sorted(os.listdir("doc/figs"))]
     ret = testwin.exec()
     if ret:
-        if not os.path.exists("data/temp/"):
-            os.makedirs("data/temp/")
-            with open("data/temp/box_config.json", "r") as f:
-                old_dicts = json.load(f)
-            with open("data/temp/box_config.json", "w") as f:
-                old_dicts.update(testwin.gather_infos())
-                json.dump(old_dicts, f, indent=4)
+        pass
+        # if not os.path.exists("configs/crop_box_cfgs/"):
+        #     os.makedirs("configs/crop_box_cfgs/")
+        #     with open("configs/crop_box_cfgs/box_config.json", "r") as f:
+        #         old_dicts = json.load(f)
+        #     with open("configs/crop_box_cfgs/box_config.json", "w") as f:
+        #         old_dicts.update(testwin.gather_infos())
+        #         json.dump(old_dicts, f, indent=4)
     testwin.destroy()
     sys.exit(ret)

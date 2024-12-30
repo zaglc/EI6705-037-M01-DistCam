@@ -17,16 +17,23 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from Qt_ui.childwins.save_prefer import childWindow
 from Qt_ui.childwins.model_selection import ModelSelectionWindow
+from Qt_ui.childwins.save_prefer import childWindow
 from Qt_ui.ctrl_panel.ctrl_panel import ctrl_panel
 from Qt_ui.data_panel.data_table import Realtime_Datatab
 from Qt_ui.terminal_panel.output_log import terminal
 from Qt_ui.utils import (
-    RS_RUNNING, RS_STOP, RS_WAITING, BOX_JSON_PATH, MODEL_JSON_PATH, VIDEO_SOURCE_POOL_PATH, 
-    compute_best_size4view_panel
+    BOX_JSON_PATH,
+    MODEL_JSON_PATH,
+    RS_RUNNING,
+    RS_STOP,
+    RS_WAITING,
+    VIDEO_SOURCE_POOL_PATH,
+    compute_best_size4view_panel,
 )
 from Qt_ui.view_panel.display import Ui_MainWindow as dis_win
+from running_models.extern_model import YOLOV3_DETECT
+
 
 class custom_window(QMainWindow):
     """
@@ -48,8 +55,12 @@ class custom_window(QMainWindow):
         ctw = QWidget(self)
         ctw.setMinimumSize(900, 540)
         self.setCentralWidget(ctw)
-        self.model_status = RS_WAITING
         self.num_cam = gpc["num_cam"]
+
+        # temp var for model selection
+        self.model_status = RS_WAITING
+        self.model_type = YOLOV3_DETECT
+        self.selected_classes = []
 
         # only for start and stop model process
         self.data_queues = gpc["data_queues"]
@@ -58,7 +69,7 @@ class custom_window(QMainWindow):
         # video command and ctrl command, maintained by custom_window
         self.command_queues = gpc["command_queues"]
 
-        self.model_config = gpc['model_config']
+        self.model_config = gpc["model_config"]
 
         self.pool = gpc["pool"]
         self.streaming = False
@@ -86,7 +97,7 @@ class custom_window(QMainWindow):
         for win in self.dis.videoWin:
             win.ctrl_select_btn_signal.connect(self.ctrl_select_btn_slot)
             win.frame_thread.camera_capture_recover_signal.connect(self.camera_cap2rec_btn_recover_slot)
-        
+
         # ctw has only children: scroll area; scroll area has no margin with dis
         self.scroll_area = QScrollArea(ctw)
         self.scroll_area.setWidget(self.dis)
@@ -343,22 +354,38 @@ class custom_window(QMainWindow):
             win.switch_cam_lock.unlock()
 
     def model_inference_set_slot(self):
-        model_list = ['None'] + list(self.model_config.keys())
-        dialog = ModelSelectionWindow(self, self.num_cam, model_list)
+        """
+        slot function for switch model and set hyper params
+        """
+
+        dialog = ModelSelectionWindow(
+            self,
+            self.num_cam,
+            self.model_config,
+            self.model_type,
+            self.model_status == RS_RUNNING,
+            self.selected_classes,
+        )
 
         ret = dialog.exec()
-        if ret == QDialog.DialogCode.Accepted:
-            current_model = dialog.get_model_selected()
+        if ret[0] == QDialog.DialogCode.Accepted:
+            current_model, is_active, model_config, selected_class = ret[1:]
+            self.model_config.update(model_config)
+            img_size = model_config[current_model]["img_size"]
+            conf_thre = model_config[current_model]["conf_thre"]
+            iou_thre = model_config[current_model]["iou_thre"]
             print(f"Select model: {current_model}")
 
-            self.model_status = RS_RUNNING if current_model != "None" else RS_WAITING
+            self.model_status = RS_RUNNING if is_active else RS_WAITING
+            self.model_type = current_model
+            self.selected_classes = selected_class
 
             for queue in self.data_queues:
-                queue.put((0, self.model_status, None, current_model))
+                queue.put((0, self.model_status, None, (current_model, selected_class, conf_thre, iou_thre)))
             for win in self.dis.videoWin:
                 win.switch_cam_lock.lock()
                 win.frame_thread.model_flag = True
-                win.frame_thread.model_type = current_model
+                win.frame_thread.model_tuple = (current_model, is_active, img_size, selected_class, conf_thre, iou_thre)
                 win.switch_cam_lock.unlock()
 
         dialog.destroy()
@@ -423,11 +450,11 @@ class custom_window(QMainWindow):
                 self.dis.videoWin[self.dis.single_view_id],
                 self.dis.parent_ctw,
                 self.dis.parent_ctw.layout(),
-                self.dis.layout()
+                self.dis.layout(),
             )
             self.dis.resize(*dis_target_size)
         self.statusBar().showMessage(f"total:{w}, {h}; central:{cw}, {ch}", 30)
-        
+
         return super().resizeEvent(event)
 
     def closeEvent(self, event):
@@ -460,7 +487,7 @@ class custom_window(QMainWindow):
 
         # pass quit flag to sub-processes
         for queue in self.data_queues:
-            queue.put((0, RS_STOP, None, None))
+            queue.put((0, RS_STOP, None, (None, None, None, None)))
         for queue in self.command_queues:
             queue.put((RS_STOP, None, None))
 

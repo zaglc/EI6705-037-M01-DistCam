@@ -148,7 +148,7 @@ class vid_src_config_window(QDialog):
                 qline.setValidator(QRegExpV(QRE(r"[\dx]{1,3}\.[\dx]{1,3}\.[\dx]{1,3}\.[\dx]{1,3}")))
             elif k == "PORT" or k == "CHANNEL":
                 qline.setValidator(QRegExpV(QRE(r"\d{1,5}")))
-            
+
             self.flayout.addRow(k, qline)
         self.buttonBox.button(QDialogButtonBox.StandardButton.Apply).setEnabled(False)
 

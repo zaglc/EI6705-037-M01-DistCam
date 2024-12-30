@@ -1,16 +1,24 @@
-import time
 import json
+import time
 from multiprocessing import Queue
 from queue import Queue as TQueue
 
 import numpy as np
 from PyQt6.QtCore import QMutex, Qt, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap
-from PyQt6.QtWidgets import QGridLayout, QGroupBox, QLabel, QPushButton, QWidget, QSizePolicy
+from PyQt6.QtWidgets import (
+    QGridLayout,
+    QGroupBox,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QWidget,
+)
 
 from Qt_ui.childwins.save_prefer import ResCropWidget
 from Qt_ui.threads import QThread4VideoDisplay
 from Qt_ui.utils import BOX_JSON_PATH, FRAME_RATIO
+
 
 class frame_win(QWidget):
     """

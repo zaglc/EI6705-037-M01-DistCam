@@ -113,13 +113,15 @@ class ObjectCounter(YOLODetector):
         self.cumulative_counts.append(current_count)
         self.check_restricted_area(detection_result)
 
-    def online_predict(self, frame: np.ndarray) -> np.ndarray:
+    def online_predict(self, frame: np.ndarray, conf_thre=0.5, iou_thre=0.5) -> np.ndarray:
         """
         Performs online object detection and updates the count in real-time for each frame.
         :param video_path: Path to the video file.
         :return: A frame with bounding boxes drawn around detected objects.
         """
-        detection_result = create_detection_result(self.frame_index, self._predict_one_frame(frame))
+        detection_result = create_detection_result(
+            self.frame_index, self._predict_one_frame(frame, conf_thre, iou_thre)
+        )
         self.count_objects_in_frame(detection_result)  # Update cumulative count
         self.frame_index += 1
         for name, conf, xywh in zip(detection_result.names, detection_result.conf, detection_result.boxes):
@@ -128,7 +130,7 @@ class ObjectCounter(YOLODetector):
             c2 = tuple(map(int, (xywh[0] + xywh[2] / 2, xywh[1] + xywh[3] / 2)))
             color = [random.randint(0, 255) for _ in range(3)]
             cv2.rectangle(frame, c1, c2, color, thickness=tl, lineType=cv2.LINE_AA)
-            if name and conf > 0.7:
+            if name and conf > conf_thre:
                 tf = max(tl - 1, 1)  # font thickness
                 t_size = cv2.getTextSize(name, 0, fontScale=tl / 3, thickness=tf)[0]
                 c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3

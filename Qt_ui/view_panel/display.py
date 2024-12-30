@@ -7,8 +7,8 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QDialog, QGridLayout, QMainWindow, QStatusBar, QWidget
 
 from Qt_ui.childwins.vid_src_config import vid_src_config_window
-from Qt_ui.view_panel.frame_window import frame_win
 from Qt_ui.utils import FRAME_ZOOM_LEVEL, compute_best_size4view_panel
+from Qt_ui.view_panel.frame_window import frame_win
 
 
 class Ui_MainWindow(QWidget):
@@ -128,9 +128,11 @@ class Ui_MainWindow(QWidget):
 
             self.size_buffer = (self.width(), self.height())
             # compute best size for Ui_MainWindow
-            target_size = compute_best_size4view_panel(self.videoWin[id], self.parent_ctw, self.parent_ctw.layout(), grid_out)
+            target_size = compute_best_size4view_panel(
+                self.videoWin[id], self.parent_ctw, self.parent_ctw.layout(), grid_out
+            )
             self.resize(*target_size)
-            
+
         self.single_view = not self.single_view
 
     def view_panel_zoom_in_slot(self, status: QStatusBar):

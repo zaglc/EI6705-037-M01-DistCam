@@ -22,10 +22,10 @@ from Qt_ui.utils import (
     FV_QTHREAD_PAUSE_Q,
     FV_QTHREAD_READY_Q,
     FV_RECORD_VIDEO_Q,
-    FV_UPDATE_VID_INFO_F,
     FV_RUNNING,
     FV_STOP,
     FV_SWITCH_CHANNEL_Q,
+    FV_UPDATE_VID_INFO_F,
     gpc_stream,
 )
 
@@ -78,7 +78,7 @@ class QThread4VideoDisplay(QThread):
 
         # model inference on or off
         self.model_flag = False
-        self.model_type = None
+        self.model_tuple = None
 
         self.display_real_flag = 0
         self.camera_active = 0
@@ -114,8 +114,8 @@ class QThread4VideoDisplay(QThread):
             # action: model inference on or off
             model_flag = self.model_flag
             self.model_flag = False
-            model_type = self.model_type 
-            self.model_type = None
+            model_tuple = self.model_tuple
+            self.model_tuple = None
             # button: camera capture
             cam_f = self.camera_active
             self.camera_active = 0
@@ -152,7 +152,7 @@ class QThread4VideoDisplay(QThread):
             elif refresh_cam_flag:
                 ret_cmd = FV_FLIP_SIMU_STREAM_Q
             elif model_flag:
-                command_msg = model_type
+                command_msg = model_tuple
                 ret_cmd = FV_FLIP_MODEL_ENABLE_Q
             elif ctrl_flag:
                 command_msg = ctrl_info

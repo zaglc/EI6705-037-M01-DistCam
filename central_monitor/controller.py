@@ -37,7 +37,7 @@ class Controller:
         self.brightness_bound = (0.5, 1.5)
 
         self._update_freq = 10
-        self._change_rate = (0.025, 0.05) # xy change half to wh change
+        self._change_rate = (0.025, 0.05)  # xy change half to wh change
 
         self.login_flag = True
         self.is_running = True
@@ -151,30 +151,35 @@ class Controller:
                 # xy change, directly refuse if out of bound
                 if item_id == 0 or item_id == 1:
                     if (
-                        direction == 1 and 
-                        round(self.normalized_box[item_id] + self.normalized_box[item_id + 2] / 2, 3) < self.box_bound[1]) or (
-                        direction == -1 and 
-                        round(self.normalized_box[item_id] - self.normalized_box[item_id + 2] / 2, 3) > self.box_bound[0]
+                        direction == 1
+                        and round(self.normalized_box[item_id] + self.normalized_box[item_id + 2] / 2, 3)
+                        < self.box_bound[1]
+                    ) or (
+                        direction == -1
+                        and round(self.normalized_box[item_id] - self.normalized_box[item_id + 2] / 2, 3)
+                        > self.box_bound[0]
                     ):
                         self.normalized_box[item_id] += self._change_rate[0] * direction
                         self.normalized_box[item_id] = round(self.normalized_box[item_id], 3)
                         adjusted = True
                 elif item_id == 2 or item_id == 3:
                     if (
-                        direction == 1 and 
-                        round(self.normalized_box[item_id - 2] + self.normalized_box[item_id] / 2, 3) < self.box_bound[1] and
-                        round(self.normalized_box[item_id - 2] - self.normalized_box[item_id] / 2, 3) > self.box_bound[0]) or (
-                        direction == -1 and 
-                        self.normalized_box[item_id] > self.box_bound[2]
-                    ):
+                        direction == 1
+                        and round(self.normalized_box[item_id - 2] + self.normalized_box[item_id] / 2, 3)
+                        < self.box_bound[1]
+                        and round(self.normalized_box[item_id - 2] - self.normalized_box[item_id] / 2, 3)
+                        > self.box_bound[0]
+                    ) or (direction == -1 and self.normalized_box[item_id] > self.box_bound[2]):
                         self.normalized_box[item_id] += self._change_rate[1] * direction
                         self.normalized_box[item_id] = round(self.normalized_box[item_id], 3)
                         adjusted = True
-                    elif (
-                        direction == 1 and
-                        self.normalized_box[item_id] < self.box_bound[1]
-                    ):
-                        mod_direct = 1 if round(self.normalized_box[item_id - 2] + self.normalized_box[item_id] / 2, 3) < self.box_bound[1] else -1
+                    elif direction == 1 and self.normalized_box[item_id] < self.box_bound[1]:
+                        mod_direct = (
+                            1
+                            if round(self.normalized_box[item_id - 2] + self.normalized_box[item_id] / 2, 3)
+                            < self.box_bound[1]
+                            else -1
+                        )
                         self.normalized_box[item_id] += self._change_rate[1] * direction
                         self.normalized_box[item_id] = round(self.normalized_box[item_id], 3)
                         self.normalized_box[item_id - 2] += self._change_rate[0] * mod_direct

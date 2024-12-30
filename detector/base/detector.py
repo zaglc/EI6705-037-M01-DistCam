@@ -24,7 +24,7 @@ class YOLODetector:
         self.model = YOLO(self.weights).to(self.device)
         self.frame_index = 0
 
-    def _predict_one_frame(self, frame: np.ndarray):
+    def _predict_one_frame(self, frame: np.ndarray, conf=0.5, iou_thre=0.5):
         """
         Performs object detection and tracking on a single frame.
 
@@ -35,10 +35,10 @@ class YOLODetector:
         """
         if not isinstance(frame, np.ndarray):
             raise TypeError("Input frame must be a numpy array.")
-        if frame.shape != (1080, 1920, 3):  # Corrected shape format
-            raise ValueError("Input frame must have shape (1080, 1920, 3).")
+        # if frame.shape != (1080, 1920, 3):  # Corrected shape format
+        #     raise ValueError("Input frame must have shape (1080, 1920, 3).")
 
-        results = self.model.track(frame, persist=True)
+        results = self.model.track(frame, conf=conf, iou=iou_thre, persist=True)
         return results
 
     def offline_predict(self, video_path: str) -> List[DetectionResult]:
