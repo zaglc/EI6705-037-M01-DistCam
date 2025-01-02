@@ -38,10 +38,16 @@ def create_detection_result(frame_index: int, results) -> DetectionResult:
     :param results: The detection model's output.
     :return: A DetectionResult instance.
     """
-    names = results[0].names
-    cls = results[0].boxes.cls.cpu().tolist()
-    conf = results[0].boxes.conf.cpu().tolist()
-    boxes = results[0].boxes.xywh.cpu().tolist()
-    track_ids = results[0].boxes.id.int().cpu().tolist()
-
+    all_names = results[0].names
+    cls = []
+    names = []
+    conf = []
+    boxes = []
+    track_ids = []
+    for i in range(len(results)):
+        cls.extend(results[i].boxes.cls.cpu().tolist())
+        names.extend([all_names[c] for c in results[i].boxes.cls.cpu().tolist()])
+        conf.extend(results[i].boxes.conf.cpu().tolist())
+        boxes.extend(results[i].boxes.xywh.cpu().tolist())
+        track_ids.extend(results[i].boxes.id.int().cpu().tolist())
     return DetectionResult(frame_index=frame_index, names=names, cls=cls, conf=conf, boxes=boxes, track_ids=track_ids)

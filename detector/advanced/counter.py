@@ -28,6 +28,8 @@ class ObjectCounter(YOLODetector):
         self.callback: Callable[[Dict[str, int]], None] = None  # Optional callback
         self.restricted_areas: List[Polygon] = []
         self.log_file: str = log_file
+        self.counted_track_id = set()
+        self.alert_history = set()
 
     def _frame_to_timestamp(self, frame_index: int) -> str:
         """
@@ -52,7 +54,7 @@ class ObjectCounter(YOLODetector):
         with open(self.log_file, "a") as log_file:
             log_file.write(log_message)
 
-    def alert_callback(frame_index: int):
+    def alert_callback(self, frame_index: int):
         print(f"ALERT: Frame {frame_index}, something entered the restricted area.")
 
     def add_restricted_area(self, vertices: List[Tuple[float, float]]) -> None:
@@ -77,12 +79,13 @@ class ObjectCounter(YOLODetector):
             center = Point(x, y)
 
             # Check if the center is within any restricted area
-            if any(area.contains(center) for area in self.restricted_areas):
+            if any(area.contains(center) for area in self.restricted_areas) and track_id not in self.alert_history:
+                self.alert_history.add(track_id)
                 entered_ids.append(track_id)
                 self.log_event(
                     detection_result.frame_index,
-                    "Entry",
-                    f"Detected '{name}' (ID: {track_id}) entering restricted area at position ({x:.2f}, {y:.2f})",
+                    "ALERT",
+                    f"'{name}' (ID: {track_id}) entering restricted area at position ({x:.2f}, {y:.2f})",
                 )
 
         # Trigger the entry callback if any object entered the restricted area
@@ -103,17 +106,20 @@ class ObjectCounter(YOLODetector):
         current_count = (
             self.cumulative_counts[-1].copy() if self.cumulative_counts else {k: 0 for k in self.classes_of_interest}
         )
-        for box, name in zip(detection_result.boxes, detection_result.names):
-            if name in self.classes_of_interest:
-                current_count[name] += 1
-                x, y, w, h = box
-                self.log_event(
-                    detection_result.frame_index, "Detection", f"Detected '{name}' at position ({x:.2f}, {y:.2f})"
-                )
+        for box, name, track_id in zip(detection_result.boxes, detection_result.names, detection_result.track_ids):
+            if track_id not in self.counted_track_id:
+                self.counted_track_id.add(track_id)
+                if name in self.classes_of_interest:
+                    current_count[name] += 1  
         self.cumulative_counts.append(current_count)
+        self.log_event(
+            detection_result.frame_index,
+            "INFO",
+            f"counting results by now: {self.cumulative_counts[-1]}",
+        )
         self.check_restricted_area(detection_result)
 
-    def online_predict(self, frame: np.ndarray) -> np.ndarray:
+    def online_predict(self, frame: np.ndarray, color = None) -> np.ndarray:
         """
         Performs online object detection and updates the count in real-time for each frame.
         :param video_path: Path to the video file.
@@ -122,13 +128,16 @@ class ObjectCounter(YOLODetector):
         detection_result = create_detection_result(self.frame_index, self._predict_one_frame(frame))
         self.count_objects_in_frame(detection_result)  # Update cumulative count
         self.frame_index += 1
-        for name, conf, *xywh in zip(detection_result.names, detection_result.conf, detection_result.boxes):
-            tl = round(0.002 * (frame.shape[0] + frame.shape[1]) / 2) + 1  # line/font thickness
-            c1 = tuple(map(int, (xywh[0] - xywh[2] / 2, xywh[1] - xywh[3] / 2)))
-            c2 = tuple(map(int, (xywh[0] + xywh[2] / 2, xywh[1] + xywh[3] / 2)))
-            color = color or [random.randint(0, 255) for _ in range(3)]
-            cv2.rectangle(frame, c1, c2, color, thickness=tl, lineType=cv2.LINE_AA)
-            if name and conf > 0.7:
+        
+        for name, conf, xywh in zip(detection_result.names, detection_result.conf, detection_result.boxes):
+            if name and conf > 0.5:
+                tl = round(0.002 * (frame.shape[0] + frame.shape[1]) / 2) + 1  # line/font thickness
+                c1 = tuple(map(int, (xywh[0] - xywh[2] / 2, xywh[1] - xywh[3] / 2)))
+                c2 = tuple(map(int, (xywh[0] + xywh[2] / 2, xywh[1] + xywh[3] / 2)))
+                color = [255, 0, 0]
+                
+                cv2.rectangle(frame, c1, c2, color, thickness=tl, lineType=cv2.LINE_AA)
+                
                 tf = max(tl - 1, 1)  # font thickness
                 t_size = cv2.getTextSize(name, 0, fontScale=tl / 3, thickness=tf)[0]
                 c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3

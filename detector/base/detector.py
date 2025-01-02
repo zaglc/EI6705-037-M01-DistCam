@@ -35,8 +35,6 @@ class YOLODetector:
         """
         if not isinstance(frame, np.ndarray):
             raise TypeError("Input frame must be a numpy array.")
-        if frame.shape != (1080, 1920, 3):  # Corrected shape format
-            raise ValueError("Input frame must have shape (1080, 1920, 3).")
 
         results = self.model.track(frame, persist=True)
         return results[0]
