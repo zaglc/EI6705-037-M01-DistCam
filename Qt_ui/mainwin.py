@@ -43,7 +43,7 @@ class custom_window(QMainWindow):
         ctrl panel
     """
 
-    def __init__(self, gpc: dict):
+    def __init__(self, gpc: dict, curtime: datetime.datetime):
         """
         Args:
             gpc: global process context such as frame_buffer, condition vars
@@ -73,7 +73,6 @@ class custom_window(QMainWindow):
 
         self.pool = gpc["pool"]
         self.streaming = False
-        curtime = datetime.datetime.now()
         self.curtime = curtime.strftime("%Y-%m-%d_%H-%M-%S")
 
         # initializing other content
@@ -381,7 +380,7 @@ class custom_window(QMainWindow):
             self.selected_classes = selected_class
 
             for queue in self.data_queues:
-                queue.put((0, self.model_status, None, (current_model, selected_class, conf_thre, iou_thre)))
+                queue.put((0, self.model_status, None, (current_model, img_size, selected_class, conf_thre, iou_thre)))
             for win in self.dis.videoWin:
                 win.switch_cam_lock.lock()
                 win.frame_thread.model_flag = True
@@ -487,7 +486,7 @@ class custom_window(QMainWindow):
 
         # pass quit flag to sub-processes
         for queue in self.data_queues:
-            queue.put((0, RS_STOP, None, (None, None, None, None)))
+            queue.put((0, RS_STOP, None, (None, None, None, None, None)))
         for queue in self.command_queues:
             queue.put((RS_STOP, None, None))
 

@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import time
+import datetime
 from multiprocessing import Process, Queue
 from queue import Empty
 from queue import Queue as TQueue
@@ -59,6 +60,7 @@ def model_Main(
     result_queue: List[Queue],
     stream: Stream,
     debug: bool,
+    curtime: datetime.datetime,
 ) -> None:
     """
     process for model inference
@@ -75,21 +77,22 @@ def model_Main(
     # model loading and cuda memory pre-allocating
     batch = min(local_num_cam, 4)
     running_status = RS_WAITING
-    model, classes, colors = initialize_model_engine(local_num_cam, inference_device, model_config)
+    log_file = os.path.join("data", curtime.strftime("%Y-%m-%d_%H-%M-%S"), "advanced_yolo.log")
+    model, classes, colors, traj_colors, track_history = initialize_model_engine(local_num_cam, inference_device, model_config, log_file)
     for queue in result_queue:
-        queue.put((classes, colors))
+        queue.put((classes, colors, traj_colors, track_history))
     model._hot_init()
 
     while True:
         # if model inference is needed, data to be inferenced will be in data_queue
         # rank-0 send start and end signal
-        fetch, tsr_lst, sender_lst, model_type_lst, conf_thre_lst, iou_thre_lst = 0, [], [], [], [], []
+        fetch, tsr_lst, sender_lst, model_type_lst, conf_thre_lst, iou_thre_lst, img_size_lst = 0, [], [], [], [], [], []
         selected_class_lst = []
 
         while fetch < batch:
             if running_status == RS_WAITING:
                 new_data = data_queue.get()
-                (vid_id, running_status, _, (data_model_request, selected_class, conf_thre, iou_thre)) = new_data
+                (vid_id, running_status, _, (data_model_request, img_size, selected_class, conf_thre, iou_thre)) = new_data
 
             if running_status == RS_WAITING:
                 continue
@@ -99,7 +102,7 @@ def model_Main(
                 try:
                     # data stuck not exist here
                     new_data = data_queue.get(timeout=WAITING_TIME)
-                    (vid_id, running_status, tsr, (data_model_request, selected_class, conf_thre, iou_thre)) = new_data
+                    (vid_id, running_status, tsr, (data_model_request, img_size, selected_class, conf_thre, iou_thre)) = new_data
 
                     if running_status == RS_RUNNING:
                         if tsr is not None:
@@ -109,6 +112,7 @@ def model_Main(
                             conf_thre_lst.append(conf_thre)
                             iou_thre_lst.append(iou_thre)
                             selected_class_lst.append(selected_class)
+                            img_size_lst.append(img_size)
                             fetch += 1
                     else:
                         size = data_queue.qsize()
@@ -122,8 +126,8 @@ def model_Main(
         # TODO: this part is MEMORY intensive
         if fetch > 0:
             # all are v3, v11
-            if len(set(model_type_lst)) == 1:
-                model.set_model(model_type_lst[0], conf_thre_lst[0], iou_thre_lst[0], selected_class_lst[0])
+            if len(set(model_type_lst)) == 1 and len(set(img_size_lst)) == 1:
+                model.set_model(model_type_lst[0], conf_thre_lst[0], iou_thre_lst[0], selected_class_lst[0], img_size_lst[0])
                 if model_type_lst[0] == YOLOV11_TRACK:
                     chunk_tsr = tsr_lst
                 else:
@@ -134,7 +138,7 @@ def model_Main(
             else:
                 results = []
                 for i in range(fetch):
-                    model.set_model(model_type_lst[i], conf_thre_lst[i], iou_thre_lst[i], selected_class_lst[0])
+                    model.set_model(model_type_lst[i], conf_thre_lst[i], iou_thre_lst[i], selected_class_lst[0], img_size_lst[i])
                     if model_type_lst[i] == YOLOV3_DETECT:
                         chunk_tsr = tsr_lst[i].unsqueeze(0)
                     else:
@@ -174,7 +178,7 @@ def frame_Main(
     if not debug:
         sys.stdout = stream
     stream._add_item(os.getpid(), f"FRAME {camera.id}")
-    classes, colors = result_queue.get()
+    classes, colors, traj_colors, track_history = result_queue.get()
 
     frame_read_queue = TQueue()
     local_command_queue = TQueue()
@@ -194,6 +198,7 @@ def frame_Main(
     frame_status = FV_RUNNING
 
     temp_resolution = None
+    cnt_pkt = None
     while True:
         # get frame
         (frame, pkg_loss) = frame_read_queue.get()
@@ -212,12 +217,12 @@ def frame_Main(
 
         if model_run == RS_RUNNING:
             tsr = preprocess_img(frame, img_size, model_type)
-            data_queue.put((camera.id, model_run, tsr, (model_type, selected_class, conf_thre, iou_thre)))
+            data_queue.put((camera.id, model_run, tsr, (model_type, img_size, selected_class, conf_thre, iou_thre)))
             try:
                 (result,) = result_queue.get(timeout=WAITING_TIME * 100)  # Large but not blocking in case of deadlock
-                frame = process_result(frame, result, classes, colors, img_size, model_type, selected_class)
+                frame, cnt_pkt = process_result(frame, result, classes, colors, img_size, model_type, selected_class, traj_colors, track_history)
             except Empty:
-                pass
+                cnt_pkt = None
 
         shape = frame.shape
         if len(shape) == 3:
@@ -229,7 +234,7 @@ def frame_Main(
             # if camera.id == 0:
             # print(frame.shape, y2-y1, x2-x1)
             frame = frame[y1:y2, x1:x2, :].copy()
-        frame_write_queue.put((frame, (ret_status, ret_val_main)))
+        frame_write_queue.put(((frame, cnt_pkt), (ret_status, ret_val_main)))
 
         # get command
         (frame_status, cmd, cmd_val) = command_read_queue.get()
@@ -276,7 +281,7 @@ def frame_Main(
     sys.stdout = sys.__stdout__
 
 
-def initialize(file: str, num_cam: int, model_config: str, log_file: bool, debug: bool):
+def initialize(file: str, num_cam: int, model_config: str, log_file: bool, debug: bool, curtime: datetime.datetime):
     """
     initial all things from config file
     """
@@ -327,6 +332,7 @@ def initialize(file: str, num_cam: int, model_config: str, log_file: bool, debug
                     result_queues[ddp_idx * length : (ddp_idx + 1) * length],
                     gpc_stream,
                     debug,
+                    curtime,
                 ),
                 name=f"model_{ddp_idx}",
             )
@@ -392,10 +398,11 @@ if __name__ == "__main__":
     video_config = args.video_config
     log_file = args.log_file
     debug = args.debug
-    gpc = initialize(video_config, num_cam, model_config, log_file, debug)
+    curtime = datetime.datetime.now()
+    gpc = initialize(video_config, num_cam, model_config, log_file, debug, curtime)
     try:
         app = QApplication(sys.argv)
-        MainWindow = custom_window(gpc)
+        MainWindow = custom_window(gpc, curtime)
         app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api="pyqt6", palette=LightPalette()))
         MainWindow.show()
         ret = app.exec()

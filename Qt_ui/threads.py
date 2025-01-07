@@ -128,7 +128,7 @@ class QThread4VideoDisplay(QThread):
             self.switch_cam_lock.unlock()
 
             # get frame from frame_queue
-            frame, (ret_status, ret_val) = self.frame_queue.get()
+            (frame, cnt_pkt), (ret_status, ret_val) = self.frame_queue.get()
             drop_flag = ret_status == FV_PKGLOSS_OCCUR_F
             update_box_json_flag = ret_status == FV_UPDATE_VID_INFO_F
 

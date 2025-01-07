@@ -1,7 +1,10 @@
+from collections import defaultdict
 import random
+import os
 
 import numpy as np
 import torch
+import cv2
 
 from detector.advanced.counter import ObjectCounter
 from running_models.yolov3.models import Darknet
@@ -11,8 +14,10 @@ from running_models.yolov3_utils import (
     non_max_suppression,
     plot_one_box,
     scale_coords,
+    xywh2xyxy,
 )
 
+MAX_TRACK_LENGTH = 80
 YOLOV3_DETECT = "yolov3-detect"
 YOLOV11_TRACK = "yolov11-track"
 __model_choices__ = [YOLOV3_DETECT, YOLOV11_TRACK]
@@ -35,6 +40,10 @@ class Engine:
 
         self.conf_thre = 0.5
         self.iou_thre = 0.5
+        self.img_size = 512
+
+        if not os.path.exists(os.path.dirname(self.log_file)):
+            os.mkdir(os.path.dirname(self.log_file))
 
     def _hot_init(self):
         """
@@ -54,7 +63,9 @@ class Engine:
                 # print("Warning: failed load model, try again using relaxed mode")
                 model.to(self.device).eval()
                 with torch.no_grad():
-                    model(torch.zeros(1, 3, img_size, img_size).to(self.device), augment=False)
+                    model(torch.randn(1, 3, img_size, img_size).to(self.device), augment=False)
+                print(f"Finish initialize {model_type}")
+
             elif model_type == YOLOV11_TRACK:
                 weight = self.model_config[model_type]["weight"]
                 img_size = self.model_config[model_type]["img_size"]
@@ -65,6 +76,12 @@ class Engine:
                     classes_of_interest=self.classes,
                     log_file=self.log_file,
                 )
+                with torch.no_grad():
+                    model.online_predict(np.zeros((img_size, img_size, 3), dtype=np.uint8))
+                print(f"Finish initialize {model_type}")
+            else:
+                model = None
+            
             self.model_pool[model_type] = model
 
     def __call__(self, chunk_tsr, **kwargs):
@@ -75,26 +92,30 @@ class Engine:
         self.model = self.model_pool[self.type]
         results = None
         if self.type == YOLOV3_DETECT:
+            self.model: Darknet
             with torch.no_grad():
                 pred = self.model(chunk_tsr.to(self.device), **kwargs)[0]
             pred = pred.clone().detach().cpu()
             results = non_max_suppression(pred, conf_thres=self.conf_thre, iou_thres=self.iou_thre, multi_label=False)
         elif self.type == YOLOV11_TRACK:
+            results = []
+            self.model: ObjectCounter
             with torch.no_grad():
                 for input in chunk_tsr:
-                    pred = self.model.online_predict(input, conf_thre=self.conf_thre, iou_thre=self.iou_thre)
-            results = [None] * len(chunk_tsr)
+                    pred = self.model.online_predict(input, conf_thre=self.conf_thre, iou_thre=self.iou_thre, imgsz=self.img_size)
+                    results.append(pred)
         else:
             results = [None] * len(chunk_tsr)
 
         return results
 
-    def set_model(self, type, conf_thre, iou_thre, selected_class):
+    def set_model(self, type, conf_thre, iou_thre, selected_class, img_size):
         if type != self.type:
             self.type = type
             self.model = self.model_pool[type]
             self.conf_thre = conf_thre
             self.iou_thre = iou_thre
+            self.img_size = img_size
             if type == YOLOV11_TRACK:
                 selected_class = [self.classes[i] for i in selected_class]
                 self.model.classes_of_interest = selected_class
@@ -112,7 +133,10 @@ def initialize_model_engine(
     classes = load_classes(model_config[YOLOV3_DETECT]["names"])
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(classes))]
     engine = Engine(classes, inference_device, model_config, local_num_cam, log_file)
-    return engine, classes, colors
+    traj_colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(100)]
+    track_history = defaultdict(list)
+
+    return engine, classes, colors, traj_colors, track_history
 
 
 def preprocess_img(ori_img: np.ndarray, img_size: int, type: str):
@@ -133,19 +157,51 @@ def preprocess_img(ori_img: np.ndarray, img_size: int, type: str):
     return img
 
 
-def process_result(ori_img: np.ndarray, det, classes, colors, img_size, type, selected_class):
+def process_result(ori_img: np.ndarray, det, classes, colors, img_size, type, selected_class, traj_colors, track_history):
     inf_shape = (int(img_size * 9 / 16), img_size)
 
     # process detections
     if type == YOLOV3_DETECT:
+        # draw bounding boxes
         if det is not None and len(det):
-            # if i == 0: print(f"DETECT: total {len(det)} boxes")
+            count_current_frame = {k: 0 for k in selected_class}
             det[:, :4] = scale_coords(inf_shape, det[:, :4], ori_img.shape).round()
 
             for *xyxy, conf, cls in reversed(det):
                 if int(cls) not in selected_class:
                     continue
+                count_current_frame[int(cls)] += 1
                 label = "%s %.2f" % (classes[int(cls)], conf)
                 plot_one_box(xyxy, ori_img, label=label, color=colors[int(cls)])
+        else:
+            count_current_frame = {k: 0 for k in selected_class}
 
-    return ori_img
+        cnt_packet = (count_current_frame, None)
+
+    elif type == YOLOV11_TRACK:
+        # draw bounding boxes and trajectory
+        names, confs, boxes, cumulative_counts, track_ids = det
+        if len(boxes):
+            count_current_frame = {k: 0 for k in selected_class}
+            boxes = scale_coords(inf_shape, xywh2xyxy(torch.tensor(boxes)), ori_img.shape).round()
+
+            for xyxy, conf, cls, tid in zip(boxes, confs, names, track_ids):
+                if int(cls) not in selected_class:
+                    continue
+                count_current_frame[int(cls)] += 1
+                label = "%s %.2f" % (classes[int(cls)], conf)
+                plot_one_box(xyxy, ori_img, label=label, color=colors[int(cls)])
+                if tid is not None:
+                    cx, cy = int((xyxy[0]+xyxy[2])/2), int((xyxy[1]+xyxy[3])/2)
+                    track_history[tid].append((cx, cy))
+                    if len(track_history[tid]) > MAX_TRACK_LENGTH:
+                        track_history[tid].pop(0)
+                    points = np.array(track_history[tid]).reshape((-1, 1, 2))
+                    cv2.polylines(ori_img, [points], isClosed=False, color=traj_colors[tid % len(traj_colors)], thickness=3)
+        else:
+            count_current_frame = {k: 0 for k in selected_class}
+
+        cnt_packet = (count_current_frame, cumulative_counts)
+
+
+    return ori_img, cnt_packet
