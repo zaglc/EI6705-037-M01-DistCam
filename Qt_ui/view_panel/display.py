@@ -52,6 +52,8 @@ class Ui_MainWindow(QWidget):
 
         super().__init__(parent=parent)
         self.num_cam = num_cam
+        self.names = names
+        self.src_changed = False
         # current choice for video source, from `video_source_pool.json`
         self.video_source_choice = video_source_choice
         # overall video source pool
@@ -190,6 +192,8 @@ class Ui_MainWindow(QWidget):
             self.videoWin[id].groupbox.setTitle(nickname)
             self.video_source_choice[id] = [source_type, index]
             self.videoWin[id].switch_cam_slot(source_type, source_info[source_type][index])
+            self.names[id] = nickname
+            self.src_changed = True
             print(f"Video source of {id} changed to {source_type}: {nickname}")
         else:
             self.videoWin[id].switch_cha.setEnabled(True)

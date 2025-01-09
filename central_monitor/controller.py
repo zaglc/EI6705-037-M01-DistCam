@@ -25,8 +25,9 @@ from central_monitor.HCNetSDK import (
     byref,
     system_get_platform_info,
 )
+from Qt_ui.utils import HIKVISION, LOCAL_VID, IP_CAM
 
-__video_sources__ = ["ip-cam", "hikvision", "local-vid"]
+__video_sources__ = [IP_CAM, HIKVISION, LOCAL_VID]
 
 
 class Controller:
@@ -61,7 +62,7 @@ class Controller:
         sys_platform, dll_loader = system_get_platform_info()
         self.src_type = src_type
         self.login_config = login_config
-        if src_type == "hikvision":
+        if src_type == HIKVISION:
             self._init_dll(sys_platform, dll_loader)
             self._login(login_config)
         else:
@@ -130,7 +131,7 @@ class Controller:
         """
 
         if self.login_flag:
-            if self.src_type == "hikvision":
+            if self.src_type == HIKVISION:
                 ret = self.HCsdk.NET_DVR_PTZControl(self.lReadPlayHandle, op[0], op[1])
                 if ret == 0:
                     print(

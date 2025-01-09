@@ -1,4 +1,5 @@
 from collections import defaultdict
+from typing import List
 import random
 import os
 
@@ -6,7 +7,7 @@ import numpy as np
 import torch
 import cv2
 
-from detector.advanced.counter import ObjectCounter
+from running_models.detector.advanced.counter import ObjectCounter
 from running_models.yolov3.models import Darknet
 from running_models.yolov3_utils import (
     letterbox,
@@ -15,9 +16,9 @@ from running_models.yolov3_utils import (
     plot_one_box,
     scale_coords,
     xywh2xyxy,
+    plot_trajectory,
 )
 
-MAX_TRACK_LENGTH = 80
 YOLOV3_DETECT = "yolov3-detect"
 YOLOV11_TRACK = "yolov11-track"
 __model_choices__ = [YOLOV3_DETECT, YOLOV11_TRACK]
@@ -70,14 +71,14 @@ class Engine:
                 weight = self.model_config[model_type]["weight"]
                 img_size = self.model_config[model_type]["img_size"]
 
-                model = ObjectCounter(
+                if not os.path.exists(os.path.dirname(weight)):
+                    os.mkdir(os.path.dirname(weight))
+                model = [ObjectCounter(
                     device=self.device,
                     weights=weight,
                     classes_of_interest=self.classes,
                     log_file=self.log_file,
-                )
-                with torch.no_grad():
-                    model.online_predict(np.zeros((img_size, img_size, 3), dtype=np.uint8))
+                ) for _ in range(self.num_cam)]
                 print(f"Finish initialize {model_type}")
             else:
                 model = None
@@ -99,10 +100,11 @@ class Engine:
             results = non_max_suppression(pred, conf_thres=self.conf_thre, iou_thres=self.iou_thre, multi_label=False)
         elif self.type == YOLOV11_TRACK:
             results = []
-            self.model: ObjectCounter
+            self.model: List[ObjectCounter]
             with torch.no_grad():
-                for input in chunk_tsr:
-                    pred = self.model.online_predict(input, conf_thre=self.conf_thre, iou_thre=self.iou_thre, imgsz=self.img_size)
+                for cam_id, input in chunk_tsr:
+                    cam_id: int
+                    pred = self.model[cam_id].online_predict(input, conf_thre=self.conf_thre, iou_thre=self.iou_thre, imgsz=self.img_size)
                     results.append(pred)
         else:
             results = [None] * len(chunk_tsr)
@@ -118,7 +120,8 @@ class Engine:
             self.img_size = img_size
             if type == YOLOV11_TRACK:
                 selected_class = [self.classes[i] for i in selected_class]
-                self.model.classes_of_interest = selected_class
+                for i in range(self.num_cam):
+                    self.model[i].reset_cumulative_counts(selected_class)
             print(f"model changed to {type}")
 
 
@@ -133,48 +136,54 @@ def initialize_model_engine(
     classes = load_classes(model_config[YOLOV3_DETECT]["names"])
     colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(classes))]
     engine = Engine(classes, inference_device, model_config, local_num_cam, log_file)
-    traj_colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(100)]
+    traj_colors = [[random.randint(50, 255) for _ in range(3)] for _ in range(100)]
     track_history = defaultdict(list)
 
     return engine, classes, colors, traj_colors, track_history
 
 
 def preprocess_img(ori_img: np.ndarray, img_size: int, type: str):
-    inf_shape = (int(img_size * 9 / 16), img_size)
+    """
+    resize and transform np.ndarray to torch.Tensor
+    """
 
     img = None
     if type == YOLOV3_DETECT:
-        img = letterbox(ori_img.copy(), new_shape=inf_shape)
+        img = letterbox(ori_img.copy(), new_shape=img_size)
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to bsx3x416x416
+        shape = img.shape[1:]
         img = np.ascontiguousarray(img)
 
         img = torch.from_numpy(img)
         img = img.float() / 255.0
     else:
         # img = img
-        img = letterbox(ori_img.copy(), new_shape=inf_shape)
+        img = letterbox(ori_img.copy(), new_shape=img_size)
+        shape = img.shape[:2]
 
-    return img
+    return img, shape
 
 
-def process_result(ori_img: np.ndarray, det, classes, colors, img_size, type, selected_class, traj_colors, track_history):
-    inf_shape = (int(img_size * 9 / 16), img_size)
+def process_result(ori_img: np.ndarray, det, classes, colors, new_shape, type, selected_class, traj_colors, track_history):
+    """
+    render results on original image
+    """
 
     # process detections
     if type == YOLOV3_DETECT:
         # draw bounding boxes
         if det is not None and len(det):
-            count_current_frame = {k: 0 for k in selected_class}
-            det[:, :4] = scale_coords(inf_shape, det[:, :4], ori_img.shape).round()
+            count_current_frame = {classes[k]: 0 for k in selected_class}
+            det[:, :4] = scale_coords(new_shape, det[:, :4], ori_img.shape).round()
 
             for *xyxy, conf, cls in reversed(det):
                 if int(cls) not in selected_class:
                     continue
-                count_current_frame[int(cls)] += 1
+                count_current_frame[classes[int(cls)]] += 1
                 label = "%s %.2f" % (classes[int(cls)], conf)
                 plot_one_box(xyxy, ori_img, label=label, color=colors[int(cls)])
         else:
-            count_current_frame = {k: 0 for k in selected_class}
+            count_current_frame = {classes[k]: 0 for k in selected_class}
 
         cnt_packet = (count_current_frame, None)
 
@@ -182,24 +191,18 @@ def process_result(ori_img: np.ndarray, det, classes, colors, img_size, type, se
         # draw bounding boxes and trajectory
         names, confs, boxes, cumulative_counts, track_ids = det
         if len(boxes):
-            count_current_frame = {k: 0 for k in selected_class}
-            boxes = scale_coords(inf_shape, xywh2xyxy(torch.tensor(boxes)), ori_img.shape).round()
+            count_current_frame = {classes[k]: 0 for k in selected_class}
+            boxes = scale_coords(new_shape, xywh2xyxy(torch.tensor(boxes)), ori_img.shape).round()
 
             for xyxy, conf, cls, tid in zip(boxes, confs, names, track_ids):
                 if int(cls) not in selected_class:
                     continue
-                count_current_frame[int(cls)] += 1
+                count_current_frame[classes[int(cls)]] += 1
                 label = "%s %.2f" % (classes[int(cls)], conf)
                 plot_one_box(xyxy, ori_img, label=label, color=colors[int(cls)])
-                if tid is not None:
-                    cx, cy = int((xyxy[0]+xyxy[2])/2), int((xyxy[1]+xyxy[3])/2)
-                    track_history[tid].append((cx, cy))
-                    if len(track_history[tid]) > MAX_TRACK_LENGTH:
-                        track_history[tid].pop(0)
-                    points = np.array(track_history[tid]).reshape((-1, 1, 2))
-                    cv2.polylines(ori_img, [points], isClosed=False, color=traj_colors[tid % len(traj_colors)], thickness=3)
+                plot_trajectory(xyxy, ori_img, tid, track_history, traj_colors)
         else:
-            count_current_frame = {k: 0 for k in selected_class}
+            count_current_frame = {classes[k]: 0 for k in selected_class}
 
         cnt_packet = (count_current_frame, cumulative_counts)
 

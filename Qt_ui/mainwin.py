@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QScrollArea,
     QSizePolicy,
+    QToolBar,
     QStatusBar,
     QVBoxLayout,
     QWidget,
@@ -21,6 +22,7 @@ from Qt_ui.childwins.model_selection import ModelSelectionWindow
 from Qt_ui.childwins.save_prefer import childWindow
 from Qt_ui.ctrl_panel.ctrl_panel import ctrl_panel
 from Qt_ui.data_panel.data_table import Realtime_Datatab
+from Qt_ui.data_panel.model_stats_visual_panel import Stats_Visualize
 from Qt_ui.terminal_panel.output_log import terminal
 from Qt_ui.utils import (
     BOX_JSON_PATH,
@@ -34,6 +36,8 @@ from Qt_ui.utils import (
 from Qt_ui.view_panel.display import Ui_MainWindow as dis_win
 from running_models.extern_model import YOLOV3_DETECT
 
+WAIT_CHILD_PROC_TIME = 5
+
 
 class custom_window(QMainWindow):
     """
@@ -43,7 +47,7 @@ class custom_window(QMainWindow):
         ctrl panel
     """
 
-    def __init__(self, gpc: dict, curtime: datetime.datetime):
+    def __init__(self, gpc: dict, curtime: datetime.datetime, selected_classes = {0: "person", 2: "car"}):
         """
         Args:
             gpc: global process context such as frame_buffer, condition vars
@@ -60,7 +64,7 @@ class custom_window(QMainWindow):
         # temp var for model selection
         self.model_status = RS_WAITING
         self.model_type = YOLOV3_DETECT
-        self.selected_classes = []
+        self.selected_classes = selected_classes
 
         # only for start and stop model process
         self.data_queues = gpc["data_queues"]
@@ -93,9 +97,10 @@ class custom_window(QMainWindow):
             video_source_choice=gpc["current_chosen_video_source"],
             video_source_info=gpc["video_source_info_lst"],
         )
-        for win in self.dis.videoWin:
+        for idx, win in enumerate(self.dis.videoWin):
             win.ctrl_select_btn_signal.connect(self.ctrl_select_btn_slot)
             win.frame_thread.camera_capture_recover_signal.connect(self.camera_cap2rec_btn_recover_slot)
+            win.switch_cha.clicked.connect(partial(self.switch_video_source_outer_slot, idx))
 
         # ctw has only children: scroll area; scroll area has no margin with dis
         self.scroll_area = QScrollArea(ctw)
@@ -119,10 +124,17 @@ class custom_window(QMainWindow):
         self.data_panel = Realtime_Datatab(self, self.num_cam)
         for win in self.dis.videoWin:
             win.frame_thread.realtime_tab_singal.connect(self.update_realtime_tab_slot)
-        self.addToolBar(Qt.ToolBarArea.BottomToolBarArea, self.data_panel)
+        self.addToolBar(Qt.ToolBarArea.RightToolBarArea, self.data_panel)
 
-        self.terminal_panel = terminal(self.centralWidget(), curtime=curtime, need_log=gpc["log"])
+        # initializing terminal panel
+        self.terminal_panel = terminal(self, curtime=curtime, need_log=gpc["log"])
         self.addToolBar(Qt.ToolBarArea.BottomToolBarArea, self.terminal_panel)
+
+        # initializing model stats figure panel
+        self.stats_panel = Stats_Visualize(self, self.names, classes_of_interest=self.selected_classes)
+        for win in self.dis.videoWin:
+            win.frame_thread.model_stats_update_signal.connect(self.stats_panel.update_data_slot)
+        self.addToolBar(Qt.ToolBarArea.BottomToolBarArea, self.stats_panel)
 
         # 修改grid，以后还要改
         ctw = self.centralWidget()
@@ -133,6 +145,7 @@ class custom_window(QMainWindow):
         # intitializing menubar
         self._init_meunbar()
         self.terminal_panel.redirect_stdout_slot("")
+        self.start_stop_slot()
 
     def _init_meunbar(self):
         self.setStatusBar(QStatusBar(self))
@@ -158,16 +171,28 @@ class custom_window(QMainWindow):
         # "Windows" menu
         ctrl_act = QAction("Ctrl Panel", self)
         ctrl_act.setStatusTip("open/close ctrl panel")
-        ctrl_act.setCheckable(True)
         data_act = QAction("Data Panel", self)
         data_act.setStatusTip("open/close data panel")
-        data_act.setCheckable(True)
+        terminal_act = QAction("Terminal Panel", self)
+        terminal_act.setStatusTip("open/close terminal panel")
+        model_act = QAction("Model Figure Panel", self)
+        model_act.setStatusTip("open/close model figure panel")
+        self.windows_act_lst = [ctrl_act, data_act, terminal_act, model_act]
+        self.toolbar_name_lst = ["ctrl_panel", "data_panel", "terminal_panel", "stats_panel"]
+        for idx, (n, act) in enumerate(zip(self.toolbar_name_lst, self.windows_act_lst)):
+            act.setCheckable(True)
+            act.setChecked(True)
+            act.triggered.connect(partial(self.set_toolbar_visible_slot, idx, n))
 
         self.menubar.addSeparator()
         windows_menu = self.menubar.addMenu("Windows(&W)")
         windows_menu.addAction(ctrl_act)
         windows_menu.addSeparator()
         windows_menu.addAction(data_act)
+        windows_menu.addSeparator()
+        windows_menu.addAction(terminal_act)
+        windows_menu.addSeparator()
+        windows_menu.addAction(model_act)
 
         # "View" menu
         zoom_in_act = QAction("Zoom in", self)
@@ -188,10 +213,10 @@ class custom_window(QMainWindow):
         windows_menu.addAction(zoom_out_act)
 
         # "Setting" menu
-        simu_stream_act = QAction("Simultaneous streaming", self)
-        simu_stream_act.setStatusTip("Open/Close simu streaming of cams")
-        simu_stream_act.setCheckable(True)
-        simu_stream_act.triggered.connect(self.refresh_active_cam_slot)
+        # simu_stream_act = QAction("Simultaneous streaming", self)
+        # simu_stream_act.setStatusTip("Open/Close simu streaming of cams")
+        # simu_stream_act.setCheckable(True)
+        # simu_stream_act.triggered.connect(self.refresh_active_cam_slot)
         model_inference_act = QAction("Model inference", self)
         model_inference_act.setStatusTip("Open/Close model inference")
         model_inference_act.setShortcut("ctrl+m")
@@ -203,7 +228,7 @@ class custom_window(QMainWindow):
         self._config_bak()
 
         setting_menu = self.menubar.addMenu("Setting(&T)")
-        setting_menu.addAction(simu_stream_act)
+        # setting_menu.addAction(simu_stream_act)
         setting_menu.addAction(model_inference_act)
         setting_menu.addSeparator()
         setting_menu.addAction(save_preference_act)
@@ -242,10 +267,9 @@ class custom_window(QMainWindow):
         slot function for updating data panel
         """
 
-        id, interval, drop, display_flag = info
+        id, interval, drop = info
         self.data_panel._compute_slide_exp_average((interval, drop), id)
-        if display_flag:
-            self.data_panel._updateTabItem(id)
+        self.data_panel._updateTabItem(id)
 
     def camera_ctrl_signal_slot(self, selected_cam: int, cmd: int, on_off: int):
         """
@@ -376,15 +400,17 @@ class custom_window(QMainWindow):
             print(f"Select model: {current_model}")
 
             self.model_status = RS_RUNNING if is_active else RS_WAITING
+            if self.model_type != current_model or selected_class != self.selected_classes:
+                self.stats_panel.reset_figure(classes_of_interest=selected_class)
             self.model_type = current_model
             self.selected_classes = selected_class
 
             for queue in self.data_queues:
-                queue.put((0, self.model_status, None, (current_model, img_size, selected_class, conf_thre, iou_thre)))
+                queue.put((0, self.model_status, None, (current_model, img_size, list(selected_class.keys()), conf_thre, iou_thre)))
             for win in self.dis.videoWin:
                 win.switch_cam_lock.lock()
                 win.frame_thread.model_flag = True
-                win.frame_thread.model_tuple = (current_model, is_active, img_size, selected_class, conf_thre, iou_thre)
+                win.frame_thread.model_tuple = (current_model, is_active, img_size, list(selected_class.keys()), conf_thre, iou_thre)
                 win.switch_cam_lock.unlock()
 
         dialog.destroy()
@@ -437,6 +463,26 @@ class custom_window(QMainWindow):
 
         dialog.destroy()
 
+    def switch_video_source_outer_slot(self, cam_id: int):
+        """
+        slot function for switching camera
+        """
+
+        if self.dis.src_changed:
+            self.dis.src_changed = False
+            self.names[cam_id] = self.dis.names[cam_id]
+            self.stats_panel.reset_figure(camera_names=self.names, cam_id=cam_id)
+
+    def set_toolbar_visible_slot(self, idx: int, obj_name: str):
+        """
+        slot function for setting toolbar visible
+        """
+
+        visible = self.windows_act_lst[idx].isChecked()
+        obj: QToolBar = getattr(self, obj_name)
+        obj.setVisible(visible)
+        print(f"set {obj_name} visible: {visible}")
+
     def resizeEvent(self, event):
         """
         show size message
@@ -476,7 +522,7 @@ class custom_window(QMainWindow):
         if not VIDEO_SOURCE_POOL_PATH.endswith("_temp.json"):
             video_src_pool_pth = video_src_pool_pth.replace(".json", "_temp.json")
         infos = [self.dis.video_source_choice, self.dis.video_source_info]
-        infos[0] = [[ii[0], infos[1][ii[0]][ii[1]]["NICKNAME"]] for ii in infos[0]]
+        infos[0] = [[ii[0], infos[1][ii[0]][ii[1]]["NICKNAME"]] if ii[0] == "local-vid" else ["local-vid", infos[1]["local-vid"]["NICKNAME"]] for ii in infos[0]]
         with open(video_src_pool_pth, "w") as f:
             json.dump({"choices": infos[0], "sources": infos[1]}, f, indent=4)
 
@@ -491,7 +537,10 @@ class custom_window(QMainWindow):
             queue.put((RS_STOP, None, None))
 
         for idx, child in enumerate(self.pool):
-            child.join()
+            child.join(WAIT_CHILD_PROC_TIME)
+            if child.is_alive():
+                print(f"{child.name} is still alive after {WAIT_CHILD_PROC_TIME}s, kill it")
+                child.terminate()
 
         self.terminal_panel.std_thread.is_running = False
         sys.stdout = sys.__stdout__

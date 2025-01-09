@@ -9,6 +9,8 @@ import numpy as np
 import torch
 import torchvision
 
+MAX_TRACK_LENGTH = 80
+
 
 def load_classes(path):
     # Loads *.names file at 'path'
@@ -131,15 +133,19 @@ def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, multi_label=T
 def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None):
     # Rescale coords (xyxy) from img1_shape to img0_shape
     if ratio_pad is None:  # calculate from img0_shape
-        gain = max(img1_shape) / max(img0_shape)  # gain  = old / new
-        pad = (img1_shape[1] - img0_shape[1] * gain) / 2, (img1_shape[0] - img0_shape[0] * gain) / 2  # wh padding
+        gain = min(
+            img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1]
+        )  # gain  = old / new
+        pad = (img1_shape[1] - img0_shape[1] * gain) / 2, (
+            img1_shape[0] - img0_shape[0] * gain
+        ) / 2  # wh padding
     else:
         gain = ratio_pad[0][0]
         pad = ratio_pad[1]
-    # print("before: ", coords, img1_shape)
-    coords[:, [0, 2]] -= pad[0]  # x padding
-    coords[:, [1, 3]] -= pad[1]  # y padding
-    coords[:, :4] /= gain
+
+    coords[..., [0, 2]] -= pad[0]  # x padding
+    coords[..., [1, 3]] -= pad[1]  # y padding
+    coords[..., :4] /= gain
     clip_coords(coords, img0_shape)
     # print("after: ", coords, img0_shape, "\n")
     return coords
@@ -167,13 +173,42 @@ def plot_one_box(x, img, color=None, label=None, line_thickness=None):
         cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
 
 
-def letterbox(img, new_shape=(416, 416)):
+def plot_trajectory(xyxy, img, tid, track_history, traj_colors):
+    # Plots trajectory on image
+    if tid != -1:
+        tl = round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1
+        cx, cy = int((xyxy[0]+xyxy[2])/2), int((xyxy[1]+xyxy[3])/2)
+        track_history[tid].append((cx, cy))
+        if len(track_history[tid]) > MAX_TRACK_LENGTH:
+            track_history[tid].pop(0)
+        points = np.array(track_history[tid]).reshape((-1, 1, 2))
+        cv2.polylines(img, [points], isClosed=False, color=traj_colors[tid % len(traj_colors)], thickness=tl)
+
+
+def letterbox(img, new_shape=(416, 416), color=(114, 114, 114), stride=32):
     # original: (1080, 1920, 3), new_shape: (288, 512)
     shape = img.shape[:2]  # current shape [height, width]
     if isinstance(new_shape, int):
+        new_shape = np.ceil(new_shape / stride) * stride
         new_shape = (new_shape, new_shape)
-    new_unpad = new_shape
+    
+    # Scale ratio (new / old)
+    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
+
+    # Compute padding
+    new_unpad = int(round(shape[0] * r)), int(round(shape[1] * r))
+    dw, dh = new_shape[1] - new_unpad[1], new_shape[0] - new_unpad[0]  # wh padding
+    dw, dh = np.mod(dw, stride), np.mod(dh, stride)
+
+    dw /= 2  # divide padding into 2 sides
+    dh /= 2
 
     if shape != new_unpad:  # resize
         img = cv2.resize(img, new_unpad[::-1], interpolation=cv2.INTER_LINEAR)
+        top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+        left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
+        img = cv2.copyMakeBorder(
+            img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color
+        )
+        # print(img.shape)
     return img

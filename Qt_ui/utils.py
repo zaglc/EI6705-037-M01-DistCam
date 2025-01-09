@@ -53,6 +53,13 @@ FRAME_RATIO = 16 / 9
 # total zoom level
 FRAME_ZOOM_LEVEL = 10
 
+# type of video sources
+LOCAL_VID = "local-vid"
+IP_CAM = "ip-cam"
+HIKVISION = "hikvision"
+
+# data panel: 
+DATA_PANEL_UPDATE_INTERVAL = 5
 
 def compute_best_size4view_panel(
     inner_widget: QWidget, outer_widget: QWidget, outer_widget_layout: QLayout, middle_widget_layout: QLayout

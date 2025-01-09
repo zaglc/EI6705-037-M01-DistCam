@@ -1,3 +1,5 @@
+import sys
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QGridLayout,
@@ -6,7 +8,10 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem,
     QToolBar,
     QWidget,
+    QApplication,
 )
+
+from Qt_ui.utils import DATA_PANEL_UPDATE_INTERVAL
 
 
 class Realtime_Datatab(QToolBar):
@@ -32,6 +37,7 @@ class Realtime_Datatab(QToolBar):
             for _ in range(num_cam)
         ]
         self.valud_keys = ["fps", "drop"]
+        self.update_count = 0
 
         self.rs, self.cs = num_cam, 2
         self.table = QTableWidget(parent=self)
@@ -50,28 +56,24 @@ class Realtime_Datatab(QToolBar):
         for i in range(self.rs):
             self._updateTabItem(i)
 
-        grid = QGridLayout()
-        grid.setSpacing(5)
-        grid.addWidget(self.table, 0, 0, 5, 0)
-        outer = QWidget(self)
-        outer.setMinimumSize(200, 200)
-        # outer.setMaximumWidth(200)
-        outer.setLayout(grid)
-        self.addWidget(outer)
+        self.addWidget(self.table)
 
     def _updateTabItem(self, row: int):
         """
         update data panel with current data
         """
 
-        for col in range(self.cs):
-            val, _, fmt = self.value_dicts[row][self.valud_keys[col]]
-            if self.valud_keys[col] == "fps":
-                val = 1 / (val + 1e-10)
-            item = QTableWidgetItem(str(round(val, fmt)))
-            item.setFlags(Qt.ItemFlag.ItemIsEnabled)
-            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.table.setItem(row, col, item)
+        self.update_count += 1
+        if self.update_count % DATA_PANEL_UPDATE_INTERVAL == 0:
+            self.update_count = 0
+            for col in range(self.cs):
+                val, _, fmt = self.value_dicts[row][self.valud_keys[col]]
+                if self.valud_keys[col] == "fps":
+                    val = 1 / (val + 1e-10)
+                item = QTableWidgetItem(str(round(val, fmt)))
+                item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.table.setItem(row, col, item)
 
     def _compute_slide_exp_average(self, new_val: list, row: int):
         """
@@ -82,3 +84,11 @@ class Realtime_Datatab(QToolBar):
             aver, rate, _ = self.value_dicts[row][self.valud_keys[col]]
             aver = aver * rate + val * (1 - rate)
             self.value_dicts[row][self.valud_keys[col]][0] = aver
+
+
+if __name__ == "__main__":
+
+    app = QApplication(sys.argv)
+    win = Realtime_Datatab(None, 4)
+    win.show()
+    app.exec()

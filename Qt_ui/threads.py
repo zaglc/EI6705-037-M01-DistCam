@@ -40,6 +40,7 @@ class QThread4VideoDisplay(QThread):
     switch_btn_recover_signal = pyqtSignal(tuple)
     realtime_tab_singal = pyqtSignal(tuple)
     camera_capture_recover_signal = pyqtSignal()
+    model_stats_update_signal = pyqtSignal(int, int, tuple)
 
     def __init__(
         self,
@@ -79,6 +80,7 @@ class QThread4VideoDisplay(QThread):
         # model inference on or off
         self.model_flag = False
         self.model_tuple = None
+        self.model_active = False
 
         self.display_real_flag = 0
         self.camera_active = 0
@@ -87,6 +89,8 @@ class QThread4VideoDisplay(QThread):
         self.pause_flag = False
         self.is_paused = True
         self.is_running = True
+
+        self.frame_count = 0
 
     def run(self):
         """
@@ -115,6 +119,8 @@ class QThread4VideoDisplay(QThread):
             model_flag = self.model_flag
             self.model_flag = False
             model_tuple = self.model_tuple
+            if model_flag:
+                self.model_active = model_tuple[1]
             self.model_tuple = None
             # button: camera capture
             cam_f = self.camera_active
@@ -129,6 +135,7 @@ class QThread4VideoDisplay(QThread):
 
             # get frame from frame_queue
             (frame, cnt_pkt), (ret_status, ret_val) = self.frame_queue.get()
+            self.frame_count += 1
             drop_flag = ret_status == FV_PKGLOSS_OCCUR_F
             update_box_json_flag = ret_status == FV_UPDATE_VID_INFO_F
 
@@ -170,11 +177,14 @@ class QThread4VideoDisplay(QThread):
             if update_box_json_flag:
                 self.switch_btn_recover_signal.emit(ret_val)
 
+            # update stats figure
+            if not self.is_paused and self.model_active:
+                self.model_stats_update_signal.emit(self.id, self.frame_count, cnt_pkt)
+
             # trigger data table updating
             self.realtime_tab_singal.emit(
-                (self.id, max(time4 - time0, 0.02), ret_val if drop_flag else 0, self.display_real_flag == 0)
+                (self.id, max(time4 - time0, 0.02), ret_val if drop_flag else 0)
             )
-            self.display_real_flag = (self.display_real_flag + 1) % 5
             time0 = time4
 
             # write command to frame_main

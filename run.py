@@ -4,7 +4,7 @@ import os
 import sys
 import time
 import datetime
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, current_process
 from queue import Empty
 from queue import Queue as TQueue
 from typing import List
@@ -67,6 +67,8 @@ def model_Main(
     """
 
     def quit_func():
+        name = current_process().name
+        print(f"{name} normally quit: Model Main Process {ddp_id}")
         sys.stdout = sys.__stdout__
 
     setproctitle.setproctitle(f"MODEL {ddp_id}")
@@ -75,7 +77,7 @@ def model_Main(
     stream._add_item(os.getpid(), f"MODEL {ddp_id}")
 
     # model loading and cuda memory pre-allocating
-    batch = min(local_num_cam, 4)
+    batch = min(local_num_cam, 1)
     running_status = RS_WAITING
     log_file = os.path.join("data", curtime.strftime("%Y-%m-%d_%H-%M-%S"), "advanced_yolo.log")
     model, classes, colors, traj_colors, track_history = initialize_model_engine(local_num_cam, inference_device, model_config, log_file)
@@ -129,7 +131,7 @@ def model_Main(
             if len(set(model_type_lst)) == 1 and len(set(img_size_lst)) == 1:
                 model.set_model(model_type_lst[0], conf_thre_lst[0], iou_thre_lst[0], selected_class_lst[0], img_size_lst[0])
                 if model_type_lst[0] == YOLOV11_TRACK:
-                    chunk_tsr = tsr_lst
+                    chunk_tsr = [(ii, tt) for ii, tt in zip(sender_lst, tsr_lst)]
                 else:
                     chunk_tsr = torch.stack(tsr_lst, dim=0)
                     # chunk_tsr = chunk_tsr.to(device=inference_device)
@@ -142,7 +144,7 @@ def model_Main(
                     if model_type_lst[i] == YOLOV3_DETECT:
                         chunk_tsr = tsr_lst[i].unsqueeze(0)
                     else:
-                        chunk_tsr = tsr_lst[i]
+                        chunk_tsr = [(sender_lst[i], tsr_lst[i])]
                     result = model(chunk_tsr, augment=False)[0]
                     results.append(result)
 
@@ -198,7 +200,7 @@ def frame_Main(
     frame_status = FV_RUNNING
 
     temp_resolution = None
-    cnt_pkt = None
+    cnt_pkt = (None, None)
     while True:
         # get frame
         (frame, pkg_loss) = frame_read_queue.get()
@@ -216,13 +218,13 @@ def frame_Main(
             ret_status = FV_FRAME_PROC_READY_F
 
         if model_run == RS_RUNNING:
-            tsr = preprocess_img(frame, img_size, model_type)
+            tsr, new_shape = preprocess_img(frame, img_size, model_type)
             data_queue.put((camera.id, model_run, tsr, (model_type, img_size, selected_class, conf_thre, iou_thre)))
             try:
                 (result,) = result_queue.get(timeout=WAITING_TIME * 100)  # Large but not blocking in case of deadlock
-                frame, cnt_pkt = process_result(frame, result, classes, colors, img_size, model_type, selected_class, traj_colors, track_history)
+                frame, cnt_pkt = process_result(frame, result, classes, colors, new_shape, model_type, selected_class, traj_colors, track_history)
             except Empty:
-                cnt_pkt = None
+                cnt_pkt = (None, None)
 
         shape = frame.shape
         if len(shape) == 3:
@@ -278,6 +280,9 @@ def frame_Main(
     camera.controller.is_running = False
     camera.controller._local_command_queue.put((0, 0))
     camera.controller.thread.join()
+
+    name = current_process().name
+    print(f"{name} normally quit: Frame Main Process {camera.id}")
     sys.stdout = sys.__stdout__
 
 
@@ -297,11 +302,17 @@ def initialize(file: str, num_cam: int, model_config: str, log_file: bool, debug
         model_config_dict = json.load(f)
 
     # number of cameras, size of data parallel
-    default = config["choices"]
-    srcs = config["sources"]
+    default: list = config["choices"]
+    srcs: dict = config["sources"]
     ddp = 1
-    camera_lst = [Camera(default[i][0], srcs[default[i][0]][-1], i, num_cam, ddp) for i in range(num_cam)]
-    default = [[d[0], [dicts["NICKNAME"] for dicts in srcs[d[0]]].index(d[1])] for d in default][:num_cam]
+
+    # if in last invoke, camera number diffenent, then calibrate
+    if num_cam > len(default):
+        default.extend([default[0] for _ in range(num_cam - len(default))])
+    else:
+        default = default[:num_cam]
+    default = [[d[0], [dicts["NICKNAME"] for dicts in srcs[d[0]]].index(d[1])] for d in default]
+    camera_lst = [Camera(default[i][0], srcs[default[i][0]][default[i][1]], i, num_cam, ddp) for i in range(num_cam)]
 
     assert num_cam % ddp == 0
 
@@ -335,6 +346,7 @@ def initialize(file: str, num_cam: int, model_config: str, log_file: bool, debug
                     curtime,
                 ),
                 name=f"model_{ddp_idx}",
+                daemon=True,
             )
         )
 
@@ -354,6 +366,7 @@ def initialize(file: str, num_cam: int, model_config: str, log_file: bool, debug
                     debug,
                 ),
                 name=f"frame_{cam_idx}",
+                daemon=True,
             )
         )
 
@@ -403,12 +416,14 @@ if __name__ == "__main__":
     try:
         app = QApplication(sys.argv)
         MainWindow = custom_window(gpc, curtime)
-        app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api="pyqt6", palette=LightPalette()))
+        # app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api="pyqt6", palette=LightPalette()))
         MainWindow.show()
         ret = app.exec()
     except Exception as e:
-        print(e)
-        MainWindow.close()
-        ret = 0
-        print("Illegal exit")
+        ret = 1
+        sys.stdout = sys.__stdout__
+        pool = gpc["pool"]
+        for proc in pool:
+            proc.terminate()
+        print(f"Illegal exit: {e}")
     sys.exit(ret)

@@ -124,7 +124,7 @@ class ctrl_panel(QToolBar):
         grid2.addWidget(groupbox)
 
         self.outer = QWidget(self)
-        self.outer.setMinimumSize(150, 300)
+        self.outer.setMinimumSize(200, 100)
         self.outer.setLayout(grid2)
         self.addWidget(self.outer)
 

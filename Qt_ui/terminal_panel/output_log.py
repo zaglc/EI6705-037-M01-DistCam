@@ -39,7 +39,7 @@ class terminal(QToolBar):
             os.mkdir(self.log_dir)
 
         outer = QTabWidget(self)
-        outer.setMinimumSize(800, 100)
+        outer.setMinimumSize(500, 100)
         outer.addTab(self.output_text, "OUTPUT")
         self.addWidget(outer)
 

@@ -1,7 +1,8 @@
 import ctypes
 import datetime
 import json
-import os
+import os, sys
+sys.path.append(os.getcwd())
 import time
 from multiprocessing import Queue
 from queue import Queue as TQueue
@@ -12,7 +13,7 @@ from typing import Dict, List
 import cv2
 import numpy as np
 
-from Qt_ui.utils import BOX_JSON_PATH
+from Qt_ui.utils import BOX_JSON_PATH, HIKVISION, LOCAL_VID, IP_CAM
 
 
 class Viewer:
@@ -59,10 +60,10 @@ class Viewer:
 
         assert "NICKNAME" in login_config, "missing video name"
         vid_name = login_config["NICKNAME"]
-        if self.src_type == "local-vid":
+        if self.src_type == LOCAL_VID:
             assert "PATH" in login_config, "missing video path"
             url = os.path.join("data", "src", login_config["PATH"])
-        elif self.src_type == "hikvision" or self.src_type == "ip-cam":
+        elif self.src_type == HIKVISION or self.src_type == IP_CAM:
             assert (
                 "NAME" in login_config
                 and "PASSWD" in login_config
@@ -77,7 +78,7 @@ class Viewer:
                 login_config["PORT"],
                 login_config["CHANNEL"],
             )
-            if self.src_type == "hikvision":
+            if self.src_type == HIKVISION:
                 url = f"rtsp://{name}:{passwd}@{ip}/Streaming/Channels/{channel}"
             else:
                 url = f"rtsp://{name}:{passwd}@{ip}:{port}/live"
@@ -203,7 +204,7 @@ class Viewer:
                     f"""picture saving info:
                         camera code:   {name}
                         save path:     {pic_pth.replace(self.capture_path,"")[1:]}
-                        resolution:    {final_size}""",
+                        resolution:    {final_size}\n""",
                     end="",
                 )
                 self.flip_inter_val("need_capture")
@@ -231,11 +232,11 @@ class Viewer:
                 self.videoWriter.release()
                 print(
                     f"""video saving info:
-                      \tcamera code:  {name}
-                      \tsave path:    {vid_pth.replace(self.capture_path,"")[1:]}
-                      \ttotal frame:  {vid_frame_cnt}
-                      \tresolution:   {final_size}
-                      \tactual time:  {strftime('%H:%M:%S',gmtime(vid_frame_cnt/self.fps))}""",
+                      camera code:  {name}
+                      save path:    {vid_pth.replace(self.capture_path,"")[1:]}
+                      total frame:  {vid_frame_cnt}
+                      resolution:   {final_size}
+                      actual time:  {strftime('%H:%M:%S',gmtime(vid_frame_cnt/self.fps))}\n""",
                     end="",
                 )
 
@@ -337,7 +338,7 @@ if __name__ == "__main__":
     # 可能只能用自己的路由器
     # url = "rtsp://admin:1234@10.180.34.124:8554/live"
     # url = "rtsp://admin:1234@192.168.36.169:8554/live"
-    url = "rtsp://admin:1234@192.168.31.210:8554/live"
+    url = "rtsp://admin:1234@192.168.31.10:8554/live"
     cap = cv2.VideoCapture(url)
 
     while True:
