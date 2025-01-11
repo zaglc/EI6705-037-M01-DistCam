@@ -10,7 +10,8 @@ import torch
 import torchvision
 
 MAX_TRACK_LENGTH = 80
-
+ALERT_COLOR = (255, 0, 0)
+NORMAL_COLOR = (0, 255, 0)
 
 def load_classes(path):
     # Loads *.names file at 'path'
@@ -183,6 +184,21 @@ def plot_trajectory(xyxy, img, tid, track_history, traj_colors):
             track_history[tid].pop(0)
         points = np.array(track_history[tid]).reshape((-1, 1, 2))
         cv2.polylines(img, [points], isClosed=False, color=traj_colors[tid % len(traj_colors)], thickness=tl)
+
+
+def fill_restrict_area(img, polygons: List[List[tuple]], alert: List[bool]):
+    # fill the restrict area
+    # print(polygons, alert)
+    if not len(polygons) == len(alert):
+        print(len(polygons), len(alert))
+        return img
+    mask = np.zeros_like(img)
+    for a, poly in zip(alert, polygons):
+        color = ALERT_COLOR if a else NORMAL_COLOR
+        cv2.fillPoly(mask, [np.array(poly, dtype=np.int32)], color[::-1])
+    img = cv2.addWeighted(img, 1, mask, 0.5, 0)
+
+    return img
 
 
 def letterbox(img, new_shape=(416, 416), color=(114, 114, 114), stride=32):

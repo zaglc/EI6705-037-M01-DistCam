@@ -1,4 +1,4 @@
-import sys
+import sys, os
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QApplication,
 )
 
+sys.path.append(os.getcwd())
 from Qt_ui.utils import DATA_PANEL_UPDATE_INTERVAL
 
 
@@ -29,21 +30,23 @@ class Realtime_Datatab(QToolBar):
     ):
         super().__init__("tool bar", parent)
         self.num_cam = num_cam
+        self.setMinimumWidth(300)
         self.value_dicts = [
             {
                 "fps": [0.0, 0.9, 2],
                 "drop": [0.0, 0.95, 2],
+                "cost": [0.0, 0.95, 2],
             }
             for _ in range(num_cam)
         ]
-        self.valud_keys = ["fps", "drop"]
+        self.valud_keys = ["fps", "drop", "cost"]
         self.update_count = 0
 
-        self.rs, self.cs = num_cam, 2
+        self.rs, self.cs = num_cam, len(self.valud_keys)
         self.table = QTableWidget(parent=self)
 
         self.table.setColumnCount(self.cs)
-        colhead = ["FRAME RATE", "DROP RATE"]
+        colhead = ["FRAME\nRATE", "DROP\nRATE", "INFERENCE\nCOST (ms)"]
         self.table.setHorizontalHeaderLabels(colhead)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 

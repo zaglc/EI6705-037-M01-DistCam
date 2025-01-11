@@ -6,6 +6,7 @@ import os
 import numpy as np
 import torch
 import cv2
+from shapely.geometry import Polygon
 
 from running_models.detector.advanced.counter import ObjectCounter
 from running_models.yolov3.models import Darknet
@@ -17,6 +18,7 @@ from running_models.yolov3_utils import (
     scale_coords,
     xywh2xyxy,
     plot_trajectory,
+    fill_restrict_area,
 )
 
 YOLOV3_DETECT = "yolov3-detect"
@@ -111,7 +113,7 @@ class Engine:
 
         return results
 
-    def set_model(self, type, conf_thre, iou_thre, selected_class, img_size):
+    def set_model(self, type, conf_thre, iou_thre, selected_class, img_size, polygons):
         if type != self.type:
             self.type = type
             self.model = self.model_pool[type]
@@ -122,6 +124,9 @@ class Engine:
                 selected_class = [self.classes[i] for i in selected_class]
                 for i in range(self.num_cam):
                     self.model[i].reset_cumulative_counts(selected_class)
+                    self.model[i].restricted_areas.clear()
+                    if len(polygons):
+                        self.model[i].add_restricted_area(polygons[i])
             print(f"model changed to {type}")
 
 
@@ -164,7 +169,7 @@ def preprocess_img(ori_img: np.ndarray, img_size: int, type: str):
     return img, shape
 
 
-def process_result(ori_img: np.ndarray, det, classes, colors, new_shape, type, selected_class, traj_colors, track_history):
+def process_result(ori_img: np.ndarray, det, classes, colors, new_shape, type, selected_class, traj_colors, track_history, polygons):
     """
     render results on original image
     """
@@ -189,11 +194,11 @@ def process_result(ori_img: np.ndarray, det, classes, colors, new_shape, type, s
 
     elif type == YOLOV11_TRACK:
         # draw bounding boxes and trajectory
-        names, confs, boxes, cumulative_counts, track_ids = det
+        names, confs, boxes, cumulative_counts, track_ids, alert = det
+        ori_img = fill_restrict_area(ori_img, polygons, alert)
         if len(boxes):
             count_current_frame = {classes[k]: 0 for k in selected_class}
             boxes = scale_coords(new_shape, xywh2xyxy(torch.tensor(boxes)), ori_img.shape).round()
-
             for xyxy, conf, cls, tid in zip(boxes, confs, names, track_ids):
                 if int(cls) not in selected_class:
                     continue

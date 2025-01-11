@@ -24,12 +24,12 @@ if __name__ == "__main__":
     counter = ObjectCounter(
         device="cuda:0",
         classes_of_interest=["car"],
-        weights="yolo11n.pt",
+        weights="running_models/detector/weights/yolo11n.pt",
         log_file=f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt",
     )
     polygon_coords = [(1000, 100), (1300, 100), (1300, 500), (1000, 500)]
     polygon = Polygon(polygon_coords)
-    # counter.add_restricted_area(polygon_coords)
+    counter.add_restricted_area(polygon_coords)
     # 获取多边形的外部坐标并转换为OpenCV需要的格式
     exterior_coords = np.array(list(polygon.exterior.coords), dtype=np.int32)
     video_path = "data\src\Jackson-Hole-WY3@06-27_07-05-02.mp4"
@@ -44,7 +44,7 @@ if __name__ == "__main__":
         success, frame = cap.read()
         if not success:
             break
-        cls, conf, boxes, cumu_cnt = counter.online_predict(frame)
+        cls, conf, boxes, cumu_cnt, _, _ = counter.online_predict(frame)
         mask = np.zeros_like(frame)
 
         # 设置多边形的颜色和透明度
@@ -55,9 +55,9 @@ if __name__ == "__main__":
         cv2.fillPoly(mask, [exterior_coords], color)
 
         # 将掩膜与原始图像融合
-        # annotated_frame = cv2.addWeighted(annotated_frame, 1, mask, alpha, 0)
-        print("Frame Index", counter.frame_index, "Counting results",  counter.cumulative_counts[-1])
-        # cv2.imshow("YOLO Tracking Frame", annotated_frame)
+        annotated_frame = cv2.addWeighted(frame, 1, mask, alpha, 0)
+        print("Frame Index", counter.frame_index, "Counting results")
+        cv2.imshow("YOLO Tracking Frame", annotated_frame)
         out.write(annotated_frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break

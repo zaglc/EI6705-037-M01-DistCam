@@ -89,6 +89,17 @@ def compute_best_size4view_panel(
     return target_size
 
 
+def add_html_color_tag(text: str, color: str, bold: bool = False) -> str:
+    """
+    add html color tag to text
+    """
+
+    if not bold:
+        return f"<font color={color}>{text}</font>"
+    else:
+        return f"<font color={color} style='font-weight:bold'>{text}</font>"
+
+
 def generate_pos(size: tuple, num_cam: int):
     max_num = 6
     length = size[0] // 4

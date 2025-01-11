@@ -134,7 +134,7 @@ class QThread4VideoDisplay(QThread):
             self.switch_cam_lock.unlock()
 
             # get frame from frame_queue
-            (frame, cnt_pkt), (ret_status, ret_val) = self.frame_queue.get()
+            (frame, cnt_pkt, model_inference_cost), (ret_status, ret_val) = self.frame_queue.get()
             self.frame_count += 1
             drop_flag = ret_status == FV_PKGLOSS_OCCUR_F
             update_box_json_flag = ret_status == FV_UPDATE_VID_INFO_F
@@ -183,7 +183,7 @@ class QThread4VideoDisplay(QThread):
 
             # trigger data table updating
             self.realtime_tab_singal.emit(
-                (self.id, max(time4 - time0, 0.02), ret_val if drop_flag else 0)
+                (self.id, max(time4 - time0, 0.02), ret_val if drop_flag else 0, model_inference_cost*1000)
             )
             time0 = time4
 

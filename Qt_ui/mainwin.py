@@ -101,6 +101,7 @@ class custom_window(QMainWindow):
             win.ctrl_select_btn_signal.connect(self.ctrl_select_btn_slot)
             win.frame_thread.camera_capture_recover_signal.connect(self.camera_cap2rec_btn_recover_slot)
             win.switch_cha.clicked.connect(partial(self.switch_video_source_outer_slot, idx))
+            win.frame_thread.switch_btn_recover_signal.connect(partial(self.update_resolution_after_switch_slot, id=idx))
 
         # ctw has only children: scroll area; scroll area has no margin with dis
         self.scroll_area = QScrollArea(ctw)
@@ -267,8 +268,8 @@ class custom_window(QMainWindow):
         slot function for updating data panel
         """
 
-        id, interval, drop = info
-        self.data_panel._compute_slide_exp_average((interval, drop), id)
+        id, interval, drop, infer_cost = info
+        self.data_panel._compute_slide_exp_average((interval, drop, infer_cost), id)
         self.data_panel._updateTabItem(id)
 
     def camera_ctrl_signal_slot(self, selected_cam: int, cmd: int, on_off: int):
@@ -384,6 +385,7 @@ class custom_window(QMainWindow):
         dialog = ModelSelectionWindow(
             self,
             self.num_cam,
+            self.names,
             self.model_config,
             self.model_type,
             self.model_status == RS_RUNNING,
@@ -392,12 +394,15 @@ class custom_window(QMainWindow):
 
         ret = dialog.exec()
         if ret[0] == QDialog.DialogCode.Accepted:
-            current_model, is_active, model_config, selected_class = ret[1:]
+            current_model, is_active, model_config, selected_class, polygons = ret[1:]
             self.model_config.update(model_config)
             img_size = model_config[current_model]["img_size"]
             conf_thre = model_config[current_model]["conf_thre"]
             iou_thre = model_config[current_model]["iou_thre"]
             print(f"Select model: {current_model}")
+
+            # if len(polygons) > 0:
+            #     polygons = [[(round(r[0] * pp[0]), round(r[1] * pp[1])) for pp in p] for r, p in zip(self.resolution, polygons)]
 
             self.model_status = RS_RUNNING if is_active else RS_WAITING
             if self.model_type != current_model or selected_class != self.selected_classes:
@@ -406,11 +411,11 @@ class custom_window(QMainWindow):
             self.selected_classes = selected_class
 
             for queue in self.data_queues:
-                queue.put((0, self.model_status, None, (current_model, img_size, list(selected_class.keys()), conf_thre, iou_thre)))
+                queue.put((0, self.model_status, None, (current_model, polygons, img_size, list(selected_class.keys()), conf_thre, iou_thre)))
             for win in self.dis.videoWin:
                 win.switch_cam_lock.lock()
                 win.frame_thread.model_flag = True
-                win.frame_thread.model_tuple = (current_model, is_active, img_size, list(selected_class.keys()), conf_thre, iou_thre)
+                win.frame_thread.model_tuple = (current_model, is_active, polygons, img_size, list(selected_class.keys()), conf_thre, iou_thre)
                 win.switch_cam_lock.unlock()
 
         dialog.destroy()
@@ -483,6 +488,15 @@ class custom_window(QMainWindow):
         obj.setVisible(visible)
         print(f"set {obj_name} visible: {visible}")
 
+    def update_resolution_after_switch_slot(self, resolution: tuple, id: int):
+        """
+        slot function for updating resolution after switching camera
+        """
+
+        self.resolution[id] = resolution
+        # print(resolution)
+
+
     def resizeEvent(self, event):
         """
         show size message
@@ -532,7 +546,7 @@ class custom_window(QMainWindow):
 
         # pass quit flag to sub-processes
         for queue in self.data_queues:
-            queue.put((0, RS_STOP, None, (None, None, None, None, None)))
+            queue.put((0, RS_STOP, None, (None, None, None, None, None, None)))
         for queue in self.command_queues:
             queue.put((RS_STOP, None, None))
 

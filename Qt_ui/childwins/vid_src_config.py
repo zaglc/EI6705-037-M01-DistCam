@@ -1,10 +1,9 @@
 import json
-import os
+import os, sys
 import sys
 from functools import partial
 from typing import List
 
-from PyQt6.QtCore import QPoint, QRect
 from PyQt6.QtCore import QRegularExpression as QRE
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QRegularExpressionValidator as QRegExpV
@@ -27,9 +26,13 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSpinBox,
+    QSpacerItem,
     QVBoxLayout,
     QWidget,
 )
+
+sys.path.append(os.getcwd())
+from Qt_ui.utils import add_html_color_tag
 
 
 # TODO: NICKNAME不改
@@ -61,6 +64,7 @@ class vid_src_config_window(QDialog):
         self.vid_srcs = vid_srcs
         self.src_dir = src_dir
         self.setWindowTitle("Video Source Configuration")
+        self.is_adding_new = False
 
         # left part
         start_row = list(vid_srcs.keys()).index(current_vid_src)
@@ -81,9 +85,18 @@ class vid_src_config_window(QDialog):
         self.listwidget.itemDoubleClicked.connect(self.show_configuration_slot)
         self.listwidget.setMaximumWidth(200)
 
+        self.add_item_btn = QPushButton("Add")
+        self.add_item_btn.clicked.connect(self.add_new_src_slot)
+        self.del_item_btn = QPushButton("Remove")
+        self.del_item_btn.clicked.connect(self.delete_src_slot)
+        hbox1 = QHBoxLayout()
+        hbox1.addWidget(self.add_item_btn)
+        hbox1.addWidget(self.del_item_btn)
+
         vbox = QVBoxLayout()
         vbox.addWidget(self.combobox)
         vbox.addWidget(self.listwidget)
+        vbox.addLayout(hbox1)
 
         # right part
         self.flayout = QFormLayout()
@@ -101,8 +114,14 @@ class vid_src_config_window(QDialog):
         self.buttonBox.button(QDialogButtonBox.StandardButton.Apply).setEnabled(False)
         self.buttonBox.setMinimumWidth(350)
 
+        self.hint_add_label = QLabel(add_html_color_tag("Hint: adding a new video source", color="red"))
+        self.hint_add_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.hint_add_label.setVisible(False)
+        spacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
         vbox2 = QVBoxLayout()
         vbox2.addLayout(self.flayout)
+        vbox2.addSpacerItem(spacer)
+        vbox2.addWidget(self.hint_add_label)
         vbox2.addWidget(self.buttonBox)
 
         hbox = QHBoxLayout()
@@ -126,7 +145,13 @@ class vid_src_config_window(QDialog):
         if hasattr(self, "buttonBox"):
             self.buttonBox.button(QDialogButtonBox.StandardButton.Apply).setEnabled(False)
 
-    def show_configuration_slot(self):
+    def show_configuration_slot(self, *args, empty: bool = False):
+        """
+        show video source configuration after change listwidget
+        """
+
+        if hasattr(self, "hint_add_label"):
+            self.hint_add_label.setVisible(empty)
         row_count = self.flayout.rowCount()
         for i in range(row_count - 1, -1, -1):
             self.flayout.removeRow(i)
@@ -137,13 +162,13 @@ class vid_src_config_window(QDialog):
         for k, v in self.vid_srcs[text][index].items():
             qline = QLineEdit(self)
             qline.textChanged.connect(apply_active_func)
-            if v != "":
+            if v != "" and not empty:
                 qline.setText(v)
             else:
                 qline.setPlaceholderText("enter content")
 
             if k == "NICKNAME":
-                qline.setValidator(QRegExpV(QRE(r"[a-zA-Z0-9_]")))
+                qline.setValidator(QRegExpV(QRE(r"[a-zA-Z0-9_-]{0,15}")))
             elif k == "IP":
                 qline.setValidator(QRegExpV(QRE(r"[\dx]{1,3}\.[\dx]{1,3}\.[\dx]{1,3}\.[\dx]{1,3}")))
             elif k == "PORT" or k == "CHANNEL":
@@ -152,12 +177,19 @@ class vid_src_config_window(QDialog):
             self.flayout.addRow(k, qline)
         self.buttonBox.button(QDialogButtonBox.StandardButton.Apply).setEnabled(False)
 
+        if empty:
+            self.listwidget.setCurrentRow(-1)
+
     def update_config_slot(self):
         """
         update video source configuration after clicking apply button
         """
 
-        nickname_repeat_flag, file_not_exist_flag = False, False
+        is_adding_new = self.is_adding_new
+        self.is_adding_new = False
+
+        update_dict = {}
+        nickname_repeat_flag, file_not_exist_flag, item_empty_flag = False, False, False
         text = self.combobox.currentText()
         index = self.listwidget.currentRow()
         for i in range(self.flayout.rowCount()):
@@ -166,22 +198,67 @@ class vid_src_config_window(QDialog):
             if k == "NICKNAME":
                 if v in self.name_dicts[text] and v != self.vid_srcs[text][index][k]:
                     nickname_repeat_flag = True
-                else:
-                    self.listwidget.item(index).setText(v)
+            elif v == "":
+                item_empty_flag = True
             elif k == "PATH":
                 if not os.path.exists(os.path.join(self.src_dir, v)):
                     file_not_exist_flag = True
 
             if not nickname_repeat_flag and not file_not_exist_flag:
-                self.vid_srcs[text][index][k] = v
+                update_dict[k] = v
         if nickname_repeat_flag:
             QMessageBox.warning(self, "Warning", "The nickname already exists.")
         elif file_not_exist_flag:
             QMessageBox.warning(self, "Warning", "The video file does not exist.")
+        elif item_empty_flag:
+            QMessageBox.warning(self, "Warning", "The item cannot be empty.")
         else:
             self.buttonBox.button(QDialogButtonBox.StandardButton.Apply).setEnabled(False)
+            if is_adding_new:
+                self.listwidget.addItem(update_dict["NICKNAME"])
+                self.vid_srcs[text].append(update_dict)
+                self.name_dicts[text].append(update_dict["NICKNAME"])
+                self.hint_add_label.setVisible(False)
+            else:
+                self.vid_srcs[text][index] = update_dict
+                self.listwidget.item(index).setText(update_dict["NICKNAME"])
+                self.name_dicts[text][index] = update_dict["NICKNAME"]
 
-        return nickname_repeat_flag or file_not_exist_flag
+        return nickname_repeat_flag or file_not_exist_flag or item_empty_flag
+
+    def add_new_src_slot(self):
+        """
+        add new video source
+        """
+
+        self.is_adding_new = True
+        self.show_configuration_slot(empty=True)
+
+    def delete_src_slot(self):
+        """
+        delete video source
+        """
+
+        if self.listwidget.count() == 1:
+            QMessageBox.warning(self, "Warning", "At least one element.")
+            return
+        index = self.listwidget.currentRow()
+        if index == -1:
+            QMessageBox.warning(self, "Warning", "Please select a video source to delete.")
+        else:
+            # msg_box = QMessageBox()
+            # msg_box.setText("Are you sure you want to delete this video source?")
+            # msg_box.setStandardButtons(QMessageBox.StandardButton.No
+            # | QMessageBox.StandardButton.Yes)
+            # ret = msg_box.exec()
+            # print(ret, QMessageBox.DialogCode.)
+            # if ret == QMessageBox.:
+            text = self.combobox.currentText()
+            self.vid_srcs[text].pop(index)
+            self.name_dicts[text].pop(index)
+            self.listwidget.takeItem(index)
+            self.listwidget.setCurrentRow(-1)
+            self.show_configuration_slot()
 
     def accept(self):
         """

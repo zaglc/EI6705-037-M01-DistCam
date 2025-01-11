@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
 )
 
 from running_models.extern_model import YOLOV11_TRACK
+from Qt_ui.childwins.advance_setting import Advanced_window
 
 
 class ModelSelectionWindow(QDialog):
@@ -38,6 +39,7 @@ class ModelSelectionWindow(QDialog):
         self,
         parent: QMainWindow | None,
         num_cam: int,
+        names: List[str],
         model_config: dict,
         current_active_model: str,
         is_active: bool,
@@ -50,6 +52,8 @@ class ModelSelectionWindow(QDialog):
         super().__init__(parent=parent)
         self.model_config = model_config
         self.num_cam = num_cam
+        self.names = names
+        self.points = []
         self.is_active = is_active
         self.current_active_model = current_active_model
         with open(self.model_config[self.current_active_model]["names"]) as f:
@@ -162,6 +166,12 @@ class ModelSelectionWindow(QDialog):
         slot func invoke after clicking advanced setting button
         """
 
+        dialog = Advanced_window(self.num_cam, self.names)
+        ret = dialog.exec()
+        if ret[0] == QDialog.DialogCode.Accepted:
+            self.points = ret[1]
+        # else:
+        #     self.points = [[] for _ in range(self.num_cam)]
 
     def click_ckbx_slot(self):
         """
@@ -223,7 +233,7 @@ class ModelSelectionWindow(QDialog):
             if widget.isChecked():
                 selected_class.update({i: self.class_names[i]})
 
-        return ret, text, self.is_active, model_config, selected_class
+        return ret, text, self.is_active, model_config, selected_class, self.points
 
 
 if __name__ == "__main__":
@@ -231,7 +241,7 @@ if __name__ == "__main__":
         model_config = json.load(f)
 
     app = QApplication(sys.argv)
-    window = ModelSelectionWindow(None, 2, model_config, "yolov3-detect", False, {0: "person", 2: "car"})
+    window = ModelSelectionWindow(None, 2, ["test1", "test2"], model_config, "yolov3-detect", False, {0: "person", 2: "car"})
 
     ret = window.exec()
     print(ret)

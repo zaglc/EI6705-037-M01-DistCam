@@ -70,8 +70,10 @@ class ObjectCounter(YOLODetector):
         Checks if any detected object is inside the restricted areas.
         :param detection_result: DetectionResult object for the frame.
         """
+
+        flag = False
         if not self.restricted_areas:
-            return
+            return [flag for _ in range(len(self.restricted_areas))]
 
         entered_ids = []  # Store IDs of objects inside restricted areas
         for box, name, track_id in zip(detection_result.boxes, detection_result.names, detection_result.track_ids):
@@ -80,18 +82,24 @@ class ObjectCounter(YOLODetector):
             center = Point(x, y)
 
             # Check if the center is within any restricted area
-            if any(area.contains(center) for area in self.restricted_areas) and track_id not in self.alert_history:
-                self.alert_history.add(track_id)
-                entered_ids.append(track_id)
-                self.log_event(
-                    detection_result.frame_index,
-                    "ALERT",
-                    f"'{name}' (ID: {track_id}) entering restricted area at position ({x:.2f}, {y:.2f})",
-                )
+            if any(area.contains(center) for area in self.restricted_areas) and name in self.classes_of_interest:
+                if track_id not in self.alert_history:
+                    self.alert_history.add(track_id)
+                    entered_ids.append(track_id)
+                    self.log_event(
+                        detection_result.frame_index,
+                        "ALERT",
+                        f"'{name}' (ID: {track_id}) entering restricted area at position ({x:.2f}, {y:.2f})",
+                    )
+                    print(box, name, self.restricted_areas)
+                # flag = True
 
         # Trigger the entry callback if any object entered the restricted area
         if entered_ids:
             self.alert_callback(detection_result.frame_index)
+            return [flag for _ in range(len(self.restricted_areas))]
+        else:
+            return [flag for _ in range(len(self.restricted_areas))]
 
     def reset_cumulative_counts(self, new_classes_of_interest: List[str] = None) -> None:
         """
@@ -119,7 +127,9 @@ class ObjectCounter(YOLODetector):
             "INFO",
             f"counting results by now: {self.cumulative_counts}",
         )
-        self.check_restricted_area(detection_result)
+        alert = self.check_restricted_area(detection_result)
+
+        return alert
 
     def online_predict(self, frame: np.ndarray, conf_thre = 0.4, iou_thre = 0.5, imgsz = 640) -> tuple:
         """
@@ -129,10 +139,10 @@ class ObjectCounter(YOLODetector):
         """
 
         detection_result = create_detection_result(self.frame_index, self._predict_one_frame(frame, conf_thre, iou_thre, imgsz))
-        self.count_objects_in_frame(detection_result)  # Update cumulative count
+        alert = self.count_objects_in_frame(detection_result)  # Update cumulative count
         self.frame_index += 1
 
-        return (detection_result.cls, detection_result.conf, detection_result.boxes, self.cumulative_counts, detection_result.track_ids)
+        return (detection_result.cls, detection_result.conf, detection_result.boxes, self.cumulative_counts, detection_result.track_ids, alert)
 
     def get_count_in_range(self, start_frame: int, end_frame: int) -> Dict[str, int]:
         """

@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 )
 
 from Qt_ui.threads import QThread4stdout
+from Qt_ui.utils import add_html_color_tag
 
 
 class terminal(QToolBar):
@@ -39,7 +40,7 @@ class terminal(QToolBar):
             os.mkdir(self.log_dir)
 
         outer = QTabWidget(self)
-        outer.setMinimumSize(500, 100)
+        outer.setMinimumSize(550, 100)
         outer.addTab(self.output_text, "OUTPUT")
         self.addWidget(outer)
 
@@ -52,10 +53,6 @@ class terminal(QToolBar):
         [time] [process] content, separate by '\t'
         """
 
-        def _add_html_color_tag(text: str, color: str) -> str:
-
-            return f"<font color={color}>{text}</font>"
-
         if text != "" and text != "\n":
             cost = datetime.datetime.now() - self.start_time
             cost = cost.total_seconds()
@@ -65,17 +62,17 @@ class terminal(QToolBar):
             cursor.movePosition(QTextCursor.MoveOperation.EndOfLine)
             for i, t in enumerate(text.split("@")):
                 if i == 1:
-                    cursor.insertHtml(_add_html_color_tag(f"[{t}]", self.colors[t.split(" ")[0]]))
+                    cursor.insertHtml(add_html_color_tag(f"[{t}]", self.colors[t.split(" ")[0]]))
                     cursor.insertText("\t")
                 elif i == 0:
-                    cursor.insertHtml(_add_html_color_tag(t, "black"))
+                    cursor.insertHtml(add_html_color_tag(t, "black", True))
                     cursor.insertText("\t")
                 else:
                     rows = t.split("\n")
                     for idx, tt in enumerate(rows):
                         if idx != 0:
                             cursor.insertText("\t" * 2)
-                        cursor.insertHtml(_add_html_color_tag(tt, "black"))
+                        cursor.insertHtml(add_html_color_tag(tt, "black"))
                         cursor.insertText("\n")
 
             self.output_text.setTextCursor(cursor)

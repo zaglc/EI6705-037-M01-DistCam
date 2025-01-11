@@ -10,6 +10,7 @@ from queue import Queue as TQueue
 from typing import List
 
 import numpy as np
+import cv2
 import qdarkstyle
 import setproctitle
 import torch
@@ -36,6 +37,7 @@ from Qt_ui.utils import (
     RS_STOP,
     RS_WAITING,
     VIDEO_SOURCE_POOL_PATH,
+    FRAME_RATIO,
     Stream,
     gpc_stream,
     safe_get,
@@ -88,13 +90,13 @@ def model_Main(
     while True:
         # if model inference is needed, data to be inferenced will be in data_queue
         # rank-0 send start and end signal
-        fetch, tsr_lst, sender_lst, model_type_lst, conf_thre_lst, iou_thre_lst, img_size_lst = 0, [], [], [], [], [], []
+        fetch, tsr_lst, sender_lst, model_type_lst, conf_thre_lst, iou_thre_lst, img_size_lst, polygens_lst = 0, [], [], [], [], [], [], []
         selected_class_lst = []
 
         while fetch < batch:
             if running_status == RS_WAITING:
                 new_data = data_queue.get()
-                (vid_id, running_status, _, (data_model_request, img_size, selected_class, conf_thre, iou_thre)) = new_data
+                (vid_id, running_status, _, (data_model_request, polygens, img_size, selected_class, conf_thre, iou_thre)) = new_data
 
             if running_status == RS_WAITING:
                 continue
@@ -104,7 +106,7 @@ def model_Main(
                 try:
                     # data stuck not exist here
                     new_data = data_queue.get(timeout=WAITING_TIME)
-                    (vid_id, running_status, tsr, (data_model_request, img_size, selected_class, conf_thre, iou_thre)) = new_data
+                    (vid_id, running_status, tsr, (data_model_request, polygens, img_size, selected_class, conf_thre, iou_thre)) = new_data
 
                     if running_status == RS_RUNNING:
                         if tsr is not None:
@@ -115,6 +117,7 @@ def model_Main(
                             iou_thre_lst.append(iou_thre)
                             selected_class_lst.append(selected_class)
                             img_size_lst.append(img_size)
+                            polygens_lst.append(polygens)
                             fetch += 1
                     else:
                         size = data_queue.qsize()
@@ -129,7 +132,7 @@ def model_Main(
         if fetch > 0:
             # all are v3, v11
             if len(set(model_type_lst)) == 1 and len(set(img_size_lst)) == 1:
-                model.set_model(model_type_lst[0], conf_thre_lst[0], iou_thre_lst[0], selected_class_lst[0], img_size_lst[0])
+                model.set_model(model_type_lst[0], conf_thre_lst[0], iou_thre_lst[0], selected_class_lst[0], img_size_lst[0], polygens_lst[0])
                 if model_type_lst[0] == YOLOV11_TRACK:
                     chunk_tsr = [(ii, tt) for ii, tt in zip(sender_lst, tsr_lst)]
                 else:
@@ -140,7 +143,7 @@ def model_Main(
             else:
                 results = []
                 for i in range(fetch):
-                    model.set_model(model_type_lst[i], conf_thre_lst[i], iou_thre_lst[i], selected_class_lst[0], img_size_lst[i])
+                    model.set_model(model_type_lst[i], conf_thre_lst[i], iou_thre_lst[i], selected_class_lst[0], img_size_lst[i], polygens_lst[0])
                     if model_type_lst[i] == YOLOV3_DETECT:
                         chunk_tsr = tsr_lst[i].unsqueeze(0)
                     else:
@@ -200,10 +203,15 @@ def frame_Main(
     frame_status = FV_RUNNING
 
     temp_resolution = None
+    resolution = None
     cnt_pkt = (None, None)
+    model_inference_cost = 0.0
+    polygons = []
+    small_polygons = []
     while True:
         # get frame
         (frame, pkg_loss) = frame_read_queue.get()
+        resolution = frame.shape[:2][::-1]
 
         # update value that: frame_main -> main
         if temp_resolution is not None:
@@ -218,13 +226,16 @@ def frame_Main(
             ret_status = FV_FRAME_PROC_READY_F
 
         if model_run == RS_RUNNING:
+            inference_start_time = time.time()
             tsr, new_shape = preprocess_img(frame, img_size, model_type)
-            data_queue.put((camera.id, model_run, tsr, (model_type, img_size, selected_class, conf_thre, iou_thre)))
+            data_queue.put((camera.id, model_run, tsr, (model_type, small_polygons, img_size, selected_class, conf_thre, iou_thre)))
             try:
                 (result,) = result_queue.get(timeout=WAITING_TIME * 100)  # Large but not blocking in case of deadlock
-                frame, cnt_pkt = process_result(frame, result, classes, colors, new_shape, model_type, selected_class, traj_colors, track_history)
+                frame, cnt_pkt = process_result(frame, result, classes, colors, new_shape, model_type, selected_class, traj_colors, track_history, polygons)
+                model_inference_cost = time.time() - inference_start_time
             except Empty:
                 cnt_pkt = (None, None)
+                model_inference_cost = 0.0
 
         shape = frame.shape
         if len(shape) == 3:
@@ -236,7 +247,7 @@ def frame_Main(
             # if camera.id == 0:
             # print(frame.shape, y2-y1, x2-x1)
             frame = frame[y1:y2, x1:x2, :].copy()
-        frame_write_queue.put(((frame, cnt_pkt), (ret_status, ret_val_main)))
+        frame_write_queue.put(((frame, cnt_pkt, model_inference_cost), (ret_status, ret_val_main)))
 
         # get command
         (frame_status, cmd, cmd_val) = command_read_queue.get()
@@ -258,7 +269,13 @@ def frame_Main(
             elif need_refresh:
                 camera.viewer.flip_inter_val("simu_stream")
             elif need_model:
-                model_type, is_active, img_size, selected_class, conf_thre, iou_thre = cmd_val
+                model_type, is_active, polygons, img_size, selected_class, conf_thre, iou_thre = cmd_val
+                if len(polygons) > 0:
+                    small_polygons = [[(round(img_size * pp[0]), round(img_size / FRAME_RATIO * pp[1])) for pp in p] for p in polygons]
+                    print("new", small_polygons)
+                    polygons = [[(round(resolution[0] * pp[0]), round(resolution[1] * pp[1])) for pp in p] for p in polygons]
+                else:
+                    small_polygons = polygons
                 model_run = RS_WAITING if not is_active else RS_RUNNING
                 strr = "enabled" if model_run == RS_RUNNING else "disabled"
                 print(f"model inference {strr} with model {model_type}, input size {img_size}", end=None)
