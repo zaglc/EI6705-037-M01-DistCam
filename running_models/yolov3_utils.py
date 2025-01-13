@@ -190,7 +190,7 @@ def fill_restrict_area(img, polygons: List[List[tuple]], alert: List[bool]):
     # fill the restrict area
     # print(polygons, alert)
     if not len(polygons) == len(alert):
-        print(len(polygons), len(alert))
+        # print(len(polygons), len(alert))
         return img
     mask = np.zeros_like(img)
     for a, poly in zip(alert, polygons):
@@ -221,10 +221,9 @@ def letterbox(img, new_shape=(416, 416), color=(114, 114, 114), stride=32):
 
     if shape != new_unpad:  # resize
         img = cv2.resize(img, new_unpad[::-1], interpolation=cv2.INTER_LINEAR)
-        top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
-        left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-        img = cv2.copyMakeBorder(
-            img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color
-        )
-        # print(img.shape)
+    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
+    img = cv2.copyMakeBorder(
+        img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color
+    )
     return img

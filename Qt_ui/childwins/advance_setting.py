@@ -126,13 +126,23 @@ class DraggableAreaWidget(QWidget):
         self.dragpint_size = size
         self._draggableRectItem_lst: List[DraggableRectItem] = []
 
-    def init_polygen(self):
+    def init_polygen(self, init_polys: List[List[tuple]]):
         bounding_rect = self.scene.sceneRect()
         cx, cy = bounding_rect.center().x(), bounding_rect.center().y()
-        size = min(bounding_rect.width(), bounding_rect.height()) // 2
+        w, h = bounding_rect.width(), bounding_rect.height()
+        size = min(w, h) // 2
+
+        init = None if len(init_polys) == 0 else init_polys[0]
+        if init is not None:
+            assert len(init) == self.poly, f"init polys: {len(init)} should have the same length as poly: {self.poly}"
+        
         for i in range(self.poly):
-            x = cx + size * math.cos(2 * math.pi * i / self.poly) - self.dragpint_size/2
-            y = cy + size * math.sin(2 * math.pi * i / self.poly) - self.dragpint_size/2
+            if init is None:
+                x = cx + size * math.cos(2 * math.pi * i / self.poly) - self.dragpint_size/2
+                y = cy + size * math.sin(2 * math.pi * i / self.poly) - self.dragpint_size/2
+            else:
+                x = init[i][0] * w - self.dragpint_size/2
+                y = init[i][1] * h - self.dragpint_size/2
             self._addPoint(x, y, i)
         self.rectItem = QGraphicsPolygonItem(QPolygonF([self[i].base_pos(0, 0) for i in range(self.poly)]))
         self.rectItem.setBrush(QColor(255, 0, 0, 50))
@@ -198,7 +208,7 @@ class DraggableAreaWidget(QWidget):
 
 
 class Draggable_previewWidget(QWidget):
-    def __init__(self, poly=4, qimage=None, parent=None, height=360):
+    def __init__(self, init_polys=[], poly=4, qimage=None, parent=None, height=360):
         super().__init__(parent)
         # 创建一个 QLabel 对象，作为背景
         pixmap = QPixmap(os.path.join("doc", "figs", "layout", "v2.png")) if qimage is None else QPixmap.fromImage(qimage)
@@ -227,7 +237,7 @@ class Draggable_previewWidget(QWidget):
 
         # 创建四个 QGraphicsEllipseItem 对象，作为四边形的角点
         points = DraggableAreaWidget(parent=self, poly=poly, scene=scene)
-        points.init_polygen()
+        points.init_polygen(init_polys)
         scene.addItem(points.rectItem)
         for i in range(points.poly):
             scene.addItem(points[i])
@@ -301,7 +311,7 @@ class XY_coord(QWidget):
         return points
 
 class Advanced_window(QDialog):
-    def __init__(self, num_cam: int, names: List[str], poly=4, qimage_lst=None):
+    def __init__(self, num_cam: int, names: List[str], init_polygons, poly=4, qimage_lst=None):
         super().__init__()
         self.num_cam = num_cam
         self.current_active = 0
@@ -310,7 +320,7 @@ class Advanced_window(QDialog):
         # preview window
         self.preview_lst: List[Draggable_previewWidget] = []
         for i in range(self.num_cam):
-            self.preview_lst.append(Draggable_previewWidget(poly=poly, qimage=qimage_lst[i] if qimage_lst is not None else None, parent=self))
+            self.preview_lst.append(Draggable_previewWidget(init_polys=init_polygons[i], poly=poly, qimage=qimage_lst[i] if qimage_lst is not None else None, parent=self))
 
         # preview arranged in tab
         self.preview_tab = QTabWidget()
@@ -370,7 +380,7 @@ class Advanced_window(QDialog):
         ret = QDialog.exec(self)
         points_lst = []
         for i in range(self.num_cam):
-            points_lst.append(self.preview_lst[i].points.get_coords(self.preview_lst[self.current_active].inner_view_size))
+            points_lst.append([self.preview_lst[i].points.get_coords(self.preview_lst[self.current_active].inner_view_size)])
 
         return ret, points_lst
 

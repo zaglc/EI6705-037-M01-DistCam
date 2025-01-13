@@ -37,7 +37,6 @@ from Qt_ui.utils import (
     RS_STOP,
     RS_WAITING,
     VIDEO_SOURCE_POOL_PATH,
-    FRAME_RATIO,
     Stream,
     gpc_stream,
     safe_get,
@@ -90,13 +89,16 @@ def model_Main(
     while True:
         # if model inference is needed, data to be inferenced will be in data_queue
         # rank-0 send start and end signal
-        fetch, tsr_lst, sender_lst, model_type_lst, conf_thre_lst, iou_thre_lst, img_size_lst, polygens_lst = 0, [], [], [], [], [], [], []
-        selected_class_lst = []
+        fetch, tsr_lst, sender_lst = 0, [], []
 
         while fetch < batch:
+            # here, only 'None' tsr will activate model inference
             if running_status == RS_WAITING:
                 new_data = data_queue.get()
-                (vid_id, running_status, _, (data_model_request, polygens, img_size, selected_class, conf_thre, iou_thre)) = new_data
+                # hyper params include: (data_model_request, polygens, img_size, selected_class, conf_thre, iou_thre)
+                (vid_id, running_status, _, hyper_params_dict) = new_data
+                if running_status == RS_RUNNING and len(hyper_params_dict) > 0:
+                    model.set_model(**hyper_params_dict)
 
             if running_status == RS_WAITING:
                 continue
@@ -106,19 +108,17 @@ def model_Main(
                 try:
                     # data stuck not exist here
                     new_data = data_queue.get(timeout=WAITING_TIME)
-                    (vid_id, running_status, tsr, (data_model_request, polygens, img_size, selected_class, conf_thre, iou_thre)) = new_data
+                    (vid_id, running_status, tsr, hyper_params_dict) = new_data
 
                     if running_status == RS_RUNNING:
                         if tsr is not None:
                             tsr_lst.append(tsr)
                             sender_lst.append(vid_id)
-                            model_type_lst.append(data_model_request)
-                            conf_thre_lst.append(conf_thre)
-                            iou_thre_lst.append(iou_thre)
-                            selected_class_lst.append(selected_class)
-                            img_size_lst.append(img_size)
-                            polygens_lst.append(polygens)
                             fetch += 1
+                        else:
+                            # 'None' tsr represents model setting
+                            model.set_model(**hyper_params_dict)
+                            break # avoid model discrepancy in one batch
                     else:
                         size = data_queue.qsize()
                         for _ in range(size):
@@ -129,35 +129,18 @@ def model_Main(
 
         # no matter which frame submit data, inference will be executed when enough data is collected
         # TODO: this part is MEMORY intensive
+        results = []
         if fetch > 0:
-            # all are v3, v11
-            if len(set(model_type_lst)) == 1 and len(set(img_size_lst)) == 1:
-                model.set_model(model_type_lst[0], conf_thre_lst[0], iou_thre_lst[0], selected_class_lst[0], img_size_lst[0], polygens_lst[0])
-                if model_type_lst[0] == YOLOV11_TRACK:
-                    chunk_tsr = [(ii, tt) for ii, tt in zip(sender_lst, tsr_lst)]
-                else:
-                    chunk_tsr = torch.stack(tsr_lst, dim=0)
-                    # chunk_tsr = chunk_tsr.to(device=inference_device)
-                results = model(chunk_tsr, augment=False)
-            # process each one respectively for type discrepancy
+            if model.type == YOLOV11_TRACK:
+                chunk_tsr = [(ii, tt) for ii, tt in zip(sender_lst, tsr_lst)]
             else:
-                results = []
-                for i in range(fetch):
-                    model.set_model(model_type_lst[i], conf_thre_lst[i], iou_thre_lst[i], selected_class_lst[0], img_size_lst[i], polygens_lst[0])
-                    if model_type_lst[i] == YOLOV3_DETECT:
-                        chunk_tsr = tsr_lst[i].unsqueeze(0)
-                    else:
-                        chunk_tsr = [(sender_lst[i], tsr_lst[i])]
-                    result = model(chunk_tsr, augment=False)[0]
-                    results.append(result)
+                chunk_tsr = torch.stack(tsr_lst, dim=0)
+                # chunk_tsr = chunk_tsr.to(device=inference_device)
+            results = model(chunk_tsr, augment=False)
 
         # dispatch results to corresponding process
         for i in range(fetch):
             result_queue[sender_lst[i]].put((results[i],))
-
-        # process image and execute inference
-        # preprocess_img(chunk_tsr, img_lst, img_size, device, active_id)
-        # process_result(img_lst, img_size, results, classes, colors)
 
         if running_status == RS_STOP:
             break
@@ -192,8 +175,6 @@ def frame_Main(
 
     model_type = "None"
     img_size = None
-    iou_thre = None
-    conf_thre = None
     selected_class = None
     is_active = None
 
@@ -203,15 +184,14 @@ def frame_Main(
     frame_status = FV_RUNNING
 
     temp_resolution = None
-    resolution = None
     cnt_pkt = (None, None)
     model_inference_cost = 0.0
+
+    # here polygons only include polys of current camera
     polygons = []
-    small_polygons = []
     while True:
         # get frame
         (frame, pkg_loss) = frame_read_queue.get()
-        resolution = frame.shape[:2][::-1]
 
         # update value that: frame_main -> main
         if temp_resolution is not None:
@@ -228,7 +208,7 @@ def frame_Main(
         if model_run == RS_RUNNING:
             inference_start_time = time.time()
             tsr, new_shape = preprocess_img(frame, img_size, model_type)
-            data_queue.put((camera.id, model_run, tsr, (model_type, small_polygons, img_size, selected_class, conf_thre, iou_thre)))
+            data_queue.put((camera.id, model_run, tsr, {}))
             try:
                 (result,) = result_queue.get(timeout=WAITING_TIME * 100)  # Large but not blocking in case of deadlock
                 frame, cnt_pkt = process_result(frame, result, classes, colors, new_shape, model_type, selected_class, traj_colors, track_history, polygons)
@@ -269,13 +249,7 @@ def frame_Main(
             elif need_refresh:
                 camera.viewer.flip_inter_val("simu_stream")
             elif need_model:
-                model_type, is_active, polygons, img_size, selected_class, conf_thre, iou_thre = cmd_val
-                if len(polygons) > 0:
-                    small_polygons = [[(round(img_size * pp[0]), round(img_size / FRAME_RATIO * pp[1])) for pp in p] for p in polygons]
-                    print("new", small_polygons)
-                    polygons = [[(round(resolution[0] * pp[0]), round(resolution[1] * pp[1])) for pp in p] for p in polygons]
-                else:
-                    small_polygons = polygons
+                model_type, is_active, polygons, img_size, selected_class = cmd_val
                 model_run = RS_WAITING if not is_active else RS_RUNNING
                 strr = "enabled" if model_run == RS_RUNNING else "disabled"
                 print(f"model inference {strr} with model {model_type}, input size {img_size}", end=None)
@@ -433,7 +407,7 @@ if __name__ == "__main__":
     try:
         app = QApplication(sys.argv)
         MainWindow = custom_window(gpc, curtime)
-        # app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api="pyqt6", palette=LightPalette()))
+        app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api="pyqt6", palette=LightPalette()))
         MainWindow.show()
         ret = app.exec()
     except Exception as e:

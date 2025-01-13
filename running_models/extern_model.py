@@ -80,7 +80,8 @@ class Engine:
                     weights=weight,
                     classes_of_interest=self.classes,
                     log_file=self.log_file,
-                ) for _ in range(self.num_cam)]
+                    cam_id=i,
+                ) for i in range(self.num_cam)]
                 print(f"Finish initialize {model_type}")
             else:
                 model = None
@@ -114,7 +115,11 @@ class Engine:
         return results
 
     def set_model(self, type, conf_thre, iou_thre, selected_class, img_size, polygons):
-        if type != self.type:
+        """
+        polygons: list of camera_polys -> list of polygons -> list of vertices
+        """
+
+        if type is not None:
             self.type = type
             self.model = self.model_pool[type]
             self.conf_thre = conf_thre
@@ -125,8 +130,9 @@ class Engine:
                 for i in range(self.num_cam):
                     self.model[i].reset_cumulative_counts(selected_class)
                     self.model[i].restricted_areas.clear()
-                    if len(polygons):
-                        self.model[i].add_restricted_area(polygons[i])
+                    # TODO: each camera may have multiple polygons, though now only 1
+                    for poly in polygons[i]:
+                        self.model[i].add_restricted_area(poly)
             print(f"model changed to {type}")
 
 
@@ -172,6 +178,7 @@ def preprocess_img(ori_img: np.ndarray, img_size: int, type: str):
 def process_result(ori_img: np.ndarray, det, classes, colors, new_shape, type, selected_class, traj_colors, track_history, polygons):
     """
     render results on original image
+    polygons: list of polygons -> list of vertices
     """
 
     # process detections

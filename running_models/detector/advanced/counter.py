@@ -15,7 +15,7 @@ from running_models.detector.base.detector import (
 
 class ObjectCounter(YOLODetector):
     def __init__(
-        self, classes_of_interest: List[str] = ["person"], log_file: str = "detection_log.txt", *args, **kwargs
+        self, cam_id: int, classes_of_interest: List[str] = ["person"], log_file: str = "detection_log.txt", *args, **kwargs
     ):
         """
         Extends YOLODetector to count objects of interest.
@@ -30,7 +30,10 @@ class ObjectCounter(YOLODetector):
         self.log_file: str = log_file
         self.counted_track_id = set()
         self.alert_history = set()
+        self.cam_id = cam_id
         self.reset_cumulative_counts()
+
+        self._write_log_count = 0
 
     def _frame_to_timestamp(self, frame_index: int) -> str:
         """
@@ -56,14 +59,19 @@ class ObjectCounter(YOLODetector):
             log_file.write(log_message)
 
     def alert_callback(self, frame_index: int):
-        print(f"ALERT: Frame {frame_index}, something entered the restricted area.")
+
+        print(f"ALERT in camera {self.cam_id}: Frame {frame_index}, something entered the restricted area.")
 
     def add_restricted_area(self, vertices: List[Tuple[float, float]]) -> None:
         """
         Adds a restricted area defined by a list of vertices.
         :param vertices: List of (x, y) tuples defining the polygon vertices.
         """
-        self.restricted_areas.append(Polygon(vertices))
+
+        if len(vertices) >= 3:
+            self.restricted_areas.append(Polygon(vertices))
+        else:
+            print(f"Invalid vertices for restricted area, size {len(vertices)}")
 
     def check_restricted_area(self, detection_result: DetectionResult) -> None:
         """
@@ -91,15 +99,14 @@ class ObjectCounter(YOLODetector):
                         "ALERT",
                         f"'{name}' (ID: {track_id}) entering restricted area at position ({x:.2f}, {y:.2f})",
                     )
-                    print(box, name, self.restricted_areas)
-                # flag = True
+                    # print(box, name, self.restricted_areas)
+                flag = True
 
         # Trigger the entry callback if any object entered the restricted area
         if entered_ids:
             self.alert_callback(detection_result.frame_index)
-            return [flag for _ in range(len(self.restricted_areas))]
-        else:
-            return [flag for _ in range(len(self.restricted_areas))]
+
+        return [flag for _ in range(len(self.restricted_areas))]
 
     def reset_cumulative_counts(self, new_classes_of_interest: List[str] = None) -> None:
         """
@@ -121,12 +128,15 @@ class ObjectCounter(YOLODetector):
             if track_id not in self.counted_track_id:
                 self.counted_track_id.add(track_id)
                 if name in self.classes_of_interest:
-                    self.cumulative_counts[name] += 1  
-        self.log_event(
-            detection_result.frame_index,
-            "INFO",
-            f"counting results by now: {self.cumulative_counts}",
-        )
+                    self.cumulative_counts[name] += 1
+        self._write_log_count += 1
+        if self._write_log_count % 5 == 0:
+            self.log_event(
+                detection_result.frame_index,
+                "INFO",
+                f"cumulative counts: {self.cumulative_counts}",
+            )
+            self._write_log_count = 0
         alert = self.check_restricted_area(detection_result)
 
         return alert

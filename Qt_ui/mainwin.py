@@ -11,7 +11,6 @@ from PyQt6.QtWidgets import (
     QDialog,
     QMainWindow,
     QScrollArea,
-    QSizePolicy,
     QToolBar,
     QStatusBar,
     QVBoxLayout,
@@ -31,6 +30,7 @@ from Qt_ui.utils import (
     RS_STOP,
     RS_WAITING,
     VIDEO_SOURCE_POOL_PATH,
+    FRAME_RATIO,
     compute_best_size4view_panel,
 )
 from Qt_ui.view_panel.display import Ui_MainWindow as dis_win
@@ -147,6 +147,8 @@ class custom_window(QMainWindow):
         self._init_meunbar()
         self.terminal_panel.redirect_stdout_slot("")
         self.start_stop_slot()
+
+        self.polygons = [[] for _ in range(self.num_cam)]
 
     def _init_meunbar(self):
         self.setStatusBar(QStatusBar(self))
@@ -382,6 +384,7 @@ class custom_window(QMainWindow):
         slot function for switch model and set hyper params
         """
 
+        preview_lst = [win._preview_image[0] for win in self.dis.videoWin]
         dialog = ModelSelectionWindow(
             self,
             self.num_cam,
@@ -390,19 +393,19 @@ class custom_window(QMainWindow):
             self.model_type,
             self.model_status == RS_RUNNING,
             self.selected_classes,
+            self.polygons,
+            preview_lst
         )
 
         ret = dialog.exec()
         if ret[0] == QDialog.DialogCode.Accepted:
-            current_model, is_active, model_config, selected_class, polygons = ret[1:]
+            current_model, is_active, model_config, selected_class, polygons, enable_adv = ret[1:]
+            self.polygons = polygons
             self.model_config.update(model_config)
             img_size = model_config[current_model]["img_size"]
             conf_thre = model_config[current_model]["conf_thre"]
             iou_thre = model_config[current_model]["iou_thre"]
             print(f"Select model: {current_model}")
-
-            # if len(polygons) > 0:
-            #     polygons = [[(round(r[0] * pp[0]), round(r[1] * pp[1])) for pp in p] for r, p in zip(self.resolution, polygons)]
 
             self.model_status = RS_RUNNING if is_active else RS_WAITING
             if self.model_type != current_model or selected_class != self.selected_classes:
@@ -410,12 +413,26 @@ class custom_window(QMainWindow):
             self.model_type = current_model
             self.selected_classes = selected_class
 
+            # set unify model config across cameras
+            small_polygons = [[[(round(img_size * pp[0]), round(img_size / FRAME_RATIO * pp[1])) for pp in poly] for poly in camera_p] for camera_p in polygons] if enable_adv else [[] for _ in range(self.num_cam)]
+            hyper_params_dict = {
+                "conf_thre": conf_thre,
+                "iou_thre": iou_thre,
+                "img_size": img_size,
+                "selected_class": selected_class,
+                "polygons": small_polygons,
+                "type": current_model,
+            }
+            # print(hyper_params_dict)
             for queue in self.data_queues:
-                queue.put((0, self.model_status, None, (current_model, polygons, img_size, list(selected_class.keys()), conf_thre, iou_thre)))
-            for win in self.dis.videoWin:
+                queue.put((0, self.model_status, None, hyper_params_dict))
+            
+            # in each cam, poly is original size, while in model it is scaled
+            origin_polygons = [[[(round(pp[0] * r[0]), round(pp[1] * r[1])) for pp in poly] for poly in camera_p] for r, camera_p in zip(self.resolution, polygons)] if enable_adv else [[] for _ in range(self.num_cam)]
+            for idx, win in enumerate(self.dis.videoWin):
                 win.switch_cam_lock.lock()
                 win.frame_thread.model_flag = True
-                win.frame_thread.model_tuple = (current_model, is_active, polygons, img_size, list(selected_class.keys()), conf_thre, iou_thre)
+                win.frame_thread.model_tuple = (current_model, is_active, origin_polygons[idx], img_size, list(selected_class.keys()))
                 win.switch_cam_lock.unlock()
 
         dialog.destroy()
@@ -536,7 +553,8 @@ class custom_window(QMainWindow):
         if not VIDEO_SOURCE_POOL_PATH.endswith("_temp.json"):
             video_src_pool_pth = video_src_pool_pth.replace(".json", "_temp.json")
         infos = [self.dis.video_source_choice, self.dis.video_source_info]
-        infos[0] = [[ii[0], infos[1][ii[0]][ii[1]]["NICKNAME"]] if ii[0] == "local-vid" else ["local-vid", infos[1]["local-vid"]["NICKNAME"]] for ii in infos[0]]
+        # print(infos)
+        infos[0] = [[ii[0], infos[1][ii[0]][ii[1]]["NICKNAME"]] if ii[0] == "local-vid" else ["local-vid", infos[1]["local-vid"][0]["NICKNAME"]] for ii in infos[0]]
         with open(video_src_pool_pth, "w") as f:
             json.dump({"choices": infos[0], "sources": infos[1]}, f, indent=4)
 
@@ -546,7 +564,7 @@ class custom_window(QMainWindow):
 
         # pass quit flag to sub-processes
         for queue in self.data_queues:
-            queue.put((0, RS_STOP, None, (None, None, None, None, None, None)))
+            queue.put((0, RS_STOP, None, {}))
         for queue in self.command_queues:
             queue.put((RS_STOP, None, None))
 

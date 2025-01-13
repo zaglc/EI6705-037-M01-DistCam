@@ -338,7 +338,7 @@ if __name__ == "__main__":
     # 可能只能用自己的路由器
     # url = "rtsp://admin:1234@10.180.34.124:8554/live"
     # url = "rtsp://admin:1234@192.168.36.169:8554/live"
-    url = "rtsp://admin:1234@192.168.31.10:8554/live"
+    url = "rtsp://admin:1234@192.168.31.212:8554/live"
     cap = cv2.VideoCapture(url)
 
     while True:
