@@ -56,7 +56,7 @@ Download miniconda script and yolov3 model weights:
 # in Linux
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 sudo bash Miniconda3-latest-Linux-x86_64.sh
-wget -P src/running_models/weights https://github.com/zaglc/EI6705-037-M01-DistCam/releases/download/v1.0/yolov3-base.pt
+wget -P src/running_models/weights https://github.com/zaglc/EI6705-037-M01-DistCam/releases/download/v5.0/yolov3-base.pt
 ```
 
 
