@@ -1,0 +1,6 @@
+[2023-10-18 14:47:01.721][INF] Private connect 192.168.89.202:8000 sock=137 this=0xe5ba6464 cmd=0x30200 port=40448
+[2023-10-18 14:47:02.728][INF] Private connect 192.168.89.202:8000 sock=137 this=0xe5ba6464 cmd=0x30200 port=60100
+[2023-10-18 14:47:02.735][INF] COM_Logout[0][0]
+[2023-10-18 14:47:02.741][DBG] CUserMgr::UnRegisterHeartProxy[0]
+[2023-10-18 14:47:02.743][INF] Private connect 192.168.89.202:8000 sock=137 this=0xe5ba6464 cmd=0x10100 port=60104
+[2023-10-18 14:47:02.750][INF] CTransUnitMgr::UnloadTransUnitLib

@@ -2,11 +2,10 @@
 
 *__pycache__
 
-yolov3
 
 2023*
 2024*
-data/temp
+2025*
 
 *passwd*
 *SandUAV*
@@ -16,3 +15,6 @@ data/temp
 *Jackson-Hole-WY2*
 
 *.pptx
+*.pt
+
+*_temp.json

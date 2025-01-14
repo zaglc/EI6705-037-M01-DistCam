@@ -1,20 +1,27 @@
-import ctypes
+import argparse
 import json
 import os
 import sys
+
+sys.path.append(os.path.join("yolov3"))
+import datetime
 import time
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, current_process
 from queue import Empty
 from queue import Queue as TQueue
 from typing import List
 
+import cv2
 import numpy as np
+import qdarkstyle
+import setproctitle
 import torch
 from PyQt6.QtWidgets import QApplication
+from qdarkstyle.light.palette import LightPalette
 
-from central_monitor.camera_top import Camera
-from Qt_ui.mainwin import custom_window
-from Qt_ui.utils import (
+from src.central_monitor.camera_top import Camera
+from src.Qt_ui.mainwin import custom_window
+from src.Qt_ui.utils import (
     FV_CAPTURE_IMAGE_Q,
     FV_FLIP_MODEL_ENABLE_Q,
     FV_FLIP_SIMU_STREAM_Q,
@@ -26,16 +33,20 @@ from Qt_ui.utils import (
     FV_RUNNING,
     FV_STOP,
     FV_SWITCH_CHANNEL_Q,
+    FV_UPDATE_VID_INFO_F,
+    MODEL_JSON_PATH,
     RS_RUNNING,
     RS_STOP,
     RS_WAITING,
+    VIDEO_SOURCE_POOL_PATH,
     Stream,
     gpc_stream,
     safe_get,
 )
-from running_models.extern_model import (
-    initialize_model,
-    non_max_suppression,
+from src.running_models.extern_model import (
+    YOLOV3_DETECT,
+    YOLOV11_TRACK,
+    initialize_model_engine,
     preprocess_img,
     process_result,
 )
@@ -46,34 +57,52 @@ WAITING_TIME = 0.01
 def model_Main(
     local_num_cam: int,
     ddp_id: int,
+    inference_device: str,
+    model_config: dict,
     data_queue: Queue,
     result_queue: List[Queue],
     stream: Stream,
+    debug: bool,
+    curtime: datetime.datetime,
 ) -> None:
     """
     process for model inference
     """
 
     def quit_func():
+        name = current_process().name
+        print(f"{name} normally quit: Model Main Process {ddp_id}")
         sys.stdout = sys.__stdout__
 
-    # sys.stdout = stream
+    setproctitle.setproctitle(f"MODEL {ddp_id}")
+    if not debug:
+        sys.stdout = stream
     stream._add_item(os.getpid(), f"MODEL {ddp_id}")
 
     # model loading and cuda memory pre-allocating
-    batch = 4
+    batch = min(local_num_cam, 1)
     running_status = RS_WAITING
-    model, device, classes, colors = initialize_model(local_num_cam)
+    log_file = os.path.join("data", curtime.strftime("%Y-%m-%d_%H-%M-%S"), "advanced_yolo.log")
+    model, classes, colors, traj_colors, track_history = initialize_model_engine(
+        local_num_cam, inference_device, model_config, log_file
+    )
     for queue in result_queue:
-        queue.put((classes, colors))
+        queue.put((classes, colors, traj_colors, track_history))
+    model._hot_init()
 
     while True:
         # if model inference is needed, data to be inferenced will be in data_queue
         # rank-0 send start and end signal
         fetch, tsr_lst, sender_lst = 0, [], []
+
         while fetch < batch:
+            # here, only 'None' tsr will activate model inference
             if running_status == RS_WAITING:
-                (vid_id, running_status, _) = data_queue.get()
+                new_data = data_queue.get()
+                # hyper params include: (data_model_request, polygens, img_size, selected_class, conf_thre, iou_thre)
+                (vid_id, running_status, _, hyper_params_dict) = new_data
+                if running_status == RS_RUNNING and len(hyper_params_dict) > 0:
+                    model.set_model(**hyper_params_dict)
 
             if running_status == RS_WAITING:
                 continue
@@ -81,33 +110,41 @@ def model_Main(
                 break
             else:
                 try:
-                    (vid_id, running_status, tsr) = data_queue.get(timeout=WAITING_TIME)
+                    # data stuck not exist here
+                    new_data = data_queue.get(timeout=WAITING_TIME)
+                    (vid_id, running_status, tsr, hyper_params_dict) = new_data
+
                     if running_status == RS_RUNNING:
-                        if tsr is None:
+                        if tsr is not None:
                             tsr_lst.append(tsr)
                             sender_lst.append(vid_id)
                             fetch += 1
+                        else:
+                            # 'None' tsr represents model setting
+                            model.set_model(**hyper_params_dict)
+                            break  # avoid model discrepancy in one batch
                     else:
-                        data_queue.empty()
+                        size = data_queue.qsize()
+                        for _ in range(size):
+                            data_queue.get()
                         break
                 except Empty:
                     break
 
         # no matter which frame submit data, inference will be executed when enough data is collected
+        # TODO: this part is MEMORY intensive
+        results = []
         if fetch > 0:
-            chunk_tsr = torch.cat(tsr_lst, dim=0)
-            chunk_tsr = chunk_tsr.to(device)
-            results = model(chunk_tsr, augment=False)[0]
-            results = results.clone().detach().cpu()
+            if model.type == YOLOV11_TRACK:
+                chunk_tsr = [(ii, tt) for ii, tt in zip(sender_lst, tsr_lst)]
+            else:
+                chunk_tsr = torch.stack(tsr_lst, dim=0)
+                # chunk_tsr = chunk_tsr.to(device=inference_device)
+            results = model(chunk_tsr, augment=False)
 
         # dispatch results to corresponding process
         for i in range(fetch):
-            results = non_max_suppression(results, conf_thres=0.3, multi_label=False)
             result_queue[sender_lst[i]].put((results[i],))
-
-        # process image and execute inference
-        # preprocess_img(chunk_tsr, img_lst, img_size, device, active_id)
-        # process_result(img_lst, img_size, results, classes, colors)
 
         if running_status == RS_STOP:
             break
@@ -122,38 +159,78 @@ def frame_Main(
     data_queue: Queue,  # frame_main, main -> model_main
     result_queue: Queue,  # model_main -> frame_main
     stream: Stream,
+    debug: bool,
 ) -> None:
     """
     process for image display
     """
 
+    setproctitle.setproctitle(f"FRAME {camera.id}")
     # start thread which continously reading videocapture
-    # sys.stdout = stream
+    if not debug:
+        sys.stdout = stream
     stream._add_item(os.getpid(), f"FRAME {camera.id}")
-    classes, colors = result_queue.get()
+    classes, colors, traj_colors, track_history = result_queue.get()
 
     frame_read_queue = TQueue()
     local_command_queue = TQueue()
-    # TODO: 可以早点开始
     camera.start_thread(frame_read_queue, local_command_queue)
-    frame_write_queue.put((camera.resolution))
+    frame_write_queue.put((camera.resolution, camera.name))
+
+    model_type = "None"
+    img_size = None
+    selected_class = None
+    is_active = None
 
     model_run = RS_WAITING
-    ret_val_main = FV_FRAME_PROC_READY_F
+    ret_status = FV_FRAME_PROC_READY_F
+    ret_val_main = None
     frame_status = FV_RUNNING
+
+    temp_resolution = None
+    cnt_pkt = (None, None)
+    model_inference_cost = 0.0
+
+    # here polygons only include polys of current camera
+    polygons = []
     while True:
         # get frame
         (frame, pkg_loss) = frame_read_queue.get()
-        if pkg_loss:
-            ret_val_main = FV_PKGLOSS_OCCUR_F
+
+        # update value that: frame_main -> main
+        if temp_resolution is not None:
+            ret_val_main = temp_resolution
+            ret_status = FV_UPDATE_VID_INFO_F
+            temp_resolution = None
+        elif pkg_loss:
+            ret_val_main = pkg_loss
+            ret_status = FV_PKGLOSS_OCCUR_F
+        else:
+            ret_val_main = None
+            ret_status = FV_FRAME_PROC_READY_F
+
         if model_run == RS_RUNNING:
-            tsr = preprocess_img(frame)
-            data_queue.put((camera.id, model_run, tsr))
+            inference_start_time = time.time()
+            tsr, new_shape = preprocess_img(frame, img_size, model_type)
+            data_queue.put((camera.id, model_run, tsr, {}))
             try:
-                (result,) = result_queue.get(WAITING_TIME)
-                frame = process_result(frame, result, colors, classes)
+                (result,) = result_queue.get(timeout=WAITING_TIME * 100)  # Large but not blocking in case of deadlock
+                frame, cnt_pkt = process_result(
+                    frame,
+                    result,
+                    classes,
+                    colors,
+                    new_shape,
+                    model_type,
+                    selected_class,
+                    traj_colors,
+                    track_history,
+                    polygons,
+                )
+                model_inference_cost = time.time() - inference_start_time
             except Empty:
-                pass
+                cnt_pkt = (None, None)
+                model_inference_cost = 0.0
 
         shape = frame.shape
         if len(shape) == 3:
@@ -162,9 +239,10 @@ def frame_Main(
             y1 = round((box[1] - box[3] / 2) * shape[0])
             x2 = round((box[0] + box[2] / 2) * shape[1])
             y2 = round((box[1] + box[3] / 2) * shape[0])
+            # if camera.id == 0:
+            # print(frame.shape, y2-y1, x2-x1)
             frame = frame[y1:y2, x1:x2, :].copy()
-        frame_write_queue.put((frame, (ret_val_main, pkg_loss)))
-        ret_val_main = FV_FRAME_PROC_READY_F
+        frame_write_queue.put(((frame, cnt_pkt, model_inference_cost), (ret_status, ret_val_main)))
 
         # get command
         (frame_status, cmd, cmd_val) = command_read_queue.get()
@@ -182,14 +260,14 @@ def frame_Main(
             if need_pause:
                 camera.viewer.flip_inter_val("need_send")
             elif need_switch:
-                # TODO: 挂窗口槽函数
-                camera.switch_vid_src(*cmd_val)
+                temp_resolution = camera.switch_vid_src(*cmd_val)
             elif need_refresh:
                 camera.viewer.flip_inter_val("simu_stream")
             elif need_model:
-                model_run = RS_RUNNING if model_run == RS_WAITING else RS_WAITING
-                strr = "enabled" if model_run else "disabled"
-                print(f"model inference {strr}", end=None)
+                model_type, is_active, polygons, img_size, selected_class = cmd_val
+                model_run = RS_WAITING if not is_active else RS_RUNNING
+                strr = "enabled" if model_run == RS_RUNNING else "disabled"
+                print(f"model inference {strr} with model {model_type}, input size {img_size}", end=None)
             elif need_capture:  # TODO: viewer自己把图片存好后翻转
                 camera.viewer.flip_inter_val("need_capture")
             elif need_record:
@@ -208,25 +286,39 @@ def frame_Main(
     camera.controller.is_running = False
     camera.controller._local_command_queue.put((0, 0))
     camera.controller.thread.join()
+
+    name = current_process().name
+    print(f"{name} normally quit: Frame Main Process {camera.id}")
     sys.stdout = sys.__stdout__
 
 
-def initialize(file: str, num_cam: int = 6):
+def initialize(file: str, num_cam: int, model_config: str, log_file: bool, debug: bool, curtime: datetime.datetime):
     """
     initial all things from config file
     """
 
-    # sys.stdout = gpc_stream
+    if not debug:
+        sys.stdout = gpc_stream
     gpc_stream._add_item(os.getpid(), "MAIN")
 
     with open(file, "r") as f:
         config = json.load(f)
 
+    with open(model_config, "r") as f:
+        model_config_dict = json.load(f)
+
     # number of cameras, size of data parallel
-    default = config["choices"]
-    srcs = config["sources"]
+    default: list = config["choices"]
+    srcs: dict = config["sources"]
     ddp = 1
-    camera_lst = [Camera(default[i][0], srcs[default[i][0]][-1], i, num_cam, ddp) for i in range(num_cam)]
+
+    # if in last invoke, camera number diffenent, then calibrate
+    if num_cam > len(default):
+        default.extend([default[0] for _ in range(num_cam - len(default))])
+    else:
+        default = default[:num_cam]
+    default = [[d[0], [dicts["NICKNAME"] for dicts in srcs[d[0]]].index(d[1])] for d in default]
+    camera_lst = [Camera(default[i][0], srcs[default[i][0]][default[i][1]], i, num_cam, ddp) for i in range(num_cam)]
 
     assert num_cam % ddp == 0
 
@@ -238,6 +330,8 @@ def initialize(file: str, num_cam: int = 6):
     frame_write_queues = [Queue() for _ in range(num_cam)]
     # for receiving command from main process
     command_queues = [Queue() for _ in range(num_cam)]
+    # The device model inference executes on
+    inference_device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
     # prepare processes
     cam_pool: List[Process] = []
@@ -249,14 +343,22 @@ def initialize(file: str, num_cam: int = 6):
                 args=(
                     length,
                     ddp_idx,
+                    inference_device,
+                    model_config_dict,
                     data_queues[ddp_idx],
                     result_queues[ddp_idx * length : (ddp_idx + 1) * length],
                     gpc_stream,
+                    debug,
+                    curtime,
                 ),
+                name=f"model_{ddp_idx}",
+                daemon=True,
             )
         )
 
     for cam_idx in range(num_cam):
+        process = Process()
+        process.name
         cam_pool.append(
             Process(
                 target=frame_Main,
@@ -267,7 +369,10 @@ def initialize(file: str, num_cam: int = 6):
                     data_queues[cam_idx // length],
                     result_queues[cam_idx],
                     gpc_stream,
+                    debug,
                 ),
+                name=f"frame_{cam_idx}",
+                daemon=True,
             )
         )
 
@@ -280,15 +385,51 @@ def initialize(file: str, num_cam: int = 6):
         "result_queues": result_queues,
         "frame_write_queues": frame_write_queues,
         "command_queues": command_queues,
+        "model_config": model_config_dict,
         "pool": cam_pool,
+        "current_chosen_video_source": default,
+        "video_source_info_lst": srcs,
+        "log": log_file,
     }
 
     return ret
 
 
 if __name__ == "__main__":
-    gpc = initialize("./configs/video_source_pool.json", 6)
-    app = QApplication(sys.argv)
-    MainWindow = custom_window(gpc)
-    MainWindow.show()
-    sys.exit(app.exec())
+    parser = argparse.ArgumentParser(description="arguments for main process")
+    parser.add_argument("-n", "--num_cam", type=int, default=1, help="number of cameras to be monitored")
+    parser.add_argument(
+        "-v",
+        "--video_config",
+        type=str,
+        default=VIDEO_SOURCE_POOL_PATH,
+        help="Path to the json file of video source pool",
+    )
+    parser.add_argument(
+        "-m", "--model_config", type=str, default=MODEL_JSON_PATH, help="Path to the json file of model config"
+    )
+    parser.add_argument("-l", "--log_file", default=True, action="store_false", help="enable logging")
+    parser.add_argument("-d", "--debug", default=False, action="store_true", help="debug mode")
+    args = parser.parse_args()
+
+    num_cam = args.num_cam
+    model_config = args.model_config
+    video_config = args.video_config
+    log_file = args.log_file
+    debug = args.debug
+    curtime = datetime.datetime.now()
+    gpc = initialize(video_config, num_cam, model_config, log_file, debug, curtime)
+    try:
+        app = QApplication(sys.argv)
+        MainWindow = custom_window(gpc, curtime)
+        app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api="pyqt6", palette=LightPalette()))
+        MainWindow.show()
+        ret = app.exec()
+    except Exception as e:
+        ret = 1
+        sys.stdout = sys.__stdout__
+        pool = gpc["pool"]
+        for proc in pool:
+            proc.terminate()
+        print(f"Illegal exit: {e}")
+    sys.exit(ret)

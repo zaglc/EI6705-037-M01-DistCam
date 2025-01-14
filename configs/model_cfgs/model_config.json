@@ -1,0 +1,21 @@
+{
+    "yolov3-detect": {
+        "name":         "yolov3-detect",
+        "img_size":     512,
+        "weight":       "src/running_models/weights/yolov3-base.pt",
+        "config":       "yolov3/cfg/yolov3.cfg",
+        "names":        "yolov3/data/coco.names",
+        "conf_thre":    0.2,
+        "iou_thre":     0.6,
+        "batch_size":   2
+    },
+    "yolov11-track": {
+        "name":         "yolov11-track",
+        "img_size":     512,
+        "weight":       "src/running_models/weights/yolo11n.pt",
+        "conf_thre":    0.7,
+        "iou_thre":     0.5,
+        "names":        "yolov3/data/coco.names",
+        "batch_size":   2
+    }
+}
