@@ -43,7 +43,24 @@ Enable advanced object tracking and set restriction areas.
 
 ## 🔧 Setup Instructions
 
-### 1. Build Environment
+### 1. Clone the Repository
+Clone the repository and its submodules (yolov3 module)
+```bash
+git clone https://github.com/zaglc/EI6705-037-M01-DistCam.git
+cd EI6705-037-M01-DistCam
+git submodule update --init --recursive
+```
+
+Download miniconda script and yolov3 model weights:
+```bash
+# in Linux
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+sudo bash Miniconda3-latest-Linux-x86_64.sh
+wget -P src/running_models/weights https://github.com/zaglc/EI6705-037-M01-DistCam/releases/download/v1.0/yolov3-base.pt
+```
+
+
+### 2. Build Environment
 Create a virtual environment and install dependencies:
 
 ```bash
@@ -53,7 +70,7 @@ pip install -r requirements.txt
 pip install torch==1.12.1-cu116 torchvision==0.13.1-cu116 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu116
 ```
 
-### 2. Configure Video Sources
+### 3. Configure Video Sources
 Edit `configs/video_source_pool.json` to specify your video sources:
 
 ```json
@@ -71,7 +88,7 @@ Edit `configs/video_source_pool.json` to specify your video sources:
 }
 ```
 
-### 3. Run the Program
+### 4. Run the Program
 Navigate to the project root and execute the main script:
 
 ```bash
@@ -135,21 +152,6 @@ python run.py --num_cam 2
 
 ## 📜 License
 This project is licensed under the MIT License. See the `LICENSE` file for details.
-
----
-
-## 📞 Contact
-For further inquiries, feel free to reach out at:
-
-- **Email:** example@example.com
-- **GitHub:** [Your GitHub Profile](https://github.com/your-profile)
-
----
-
-## 📊 Star History
-
-
-[![Star History Chart](https://api.star-history.com/svg?repos=zaglc/EI6705-037-M01-DistCam&type=Date)](https://star-history.com/#zaglc/EI6705-037-M01-DistCam&Date)
 
 ---
 

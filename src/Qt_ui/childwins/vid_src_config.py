@@ -32,7 +32,7 @@ from PyQt6.QtWidgets import (
 )
 
 sys.path.append(os.getcwd())
-from src.Qt_ui.utils import add_html_color_tag
+from src.Qt_ui.utils import add_html_color_tag, check_rtsp_available, RTSP_WAIT_TIME, IP_CAM, HIKVISION
 
 
 # TODO: NICKNAME不改
@@ -192,6 +192,7 @@ class vid_src_config_window(QDialog):
         nickname_repeat_flag, file_not_exist_flag, item_empty_flag = False, False, False
         text = self.combobox.currentText()
         index = self.listwidget.currentRow()
+        ip, port, valid_rtsp = None, None, True
         for i in range(self.flayout.rowCount()):
             k = self.flayout.itemAt(i, QFormLayout.ItemRole.LabelRole).widget().text()
             v = self.flayout.itemAt(i, QFormLayout.ItemRole.FieldRole).widget().text()
@@ -203,15 +204,25 @@ class vid_src_config_window(QDialog):
             elif k == "PATH":
                 if not os.path.exists(os.path.join(self.src_dir, v)):
                     file_not_exist_flag = True
+            elif k == "IP":
+                ip = v
+            elif k == "PORT":
+                port = int(v)
 
             if not nickname_repeat_flag and not file_not_exist_flag:
                 update_dict[k] = v
+
+        if ip is not None and port is not None and (text == HIKVISION or text == IP_CAM):
+            valid_rtsp = check_rtsp_available(ip, port)
+
         if nickname_repeat_flag:
             QMessageBox.warning(self, "Warning", "The nickname already exists.")
         elif file_not_exist_flag:
             QMessageBox.warning(self, "Warning", "The video file does not exist.")
         elif item_empty_flag:
             QMessageBox.warning(self, "Warning", "The item cannot be empty.")
+        elif not valid_rtsp:
+            QMessageBox.warning(self, "Warning", "The IP address or port is invalid.")
         else:
             self.buttonBox.button(QDialogButtonBox.StandardButton.Apply).setEnabled(False)
             if is_adding_new:
@@ -224,7 +235,7 @@ class vid_src_config_window(QDialog):
                 self.listwidget.item(index).setText(update_dict["NICKNAME"])
                 self.name_dicts[text][index] = update_dict["NICKNAME"]
 
-        return nickname_repeat_flag or file_not_exist_flag or item_empty_flag
+        return nickname_repeat_flag or file_not_exist_flag or item_empty_flag or not valid_rtsp
 
     def add_new_src_slot(self):
         """

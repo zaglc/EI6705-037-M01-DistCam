@@ -4,6 +4,7 @@ from multiprocessing import Queue
 from queue import Empty
 from queue import Queue as TQueue
 from typing import Callable
+import socket
 
 import cv2
 import numpy as np
@@ -31,6 +32,7 @@ FV_STOP = 0
 FV_RUNNING = 2
 
 MAX_QUEUE_WAIT_TIME = 5
+RTSP_WAIT_TIME = 5
 
 # path to save box_config.json
 BOX_JSON_PATH = os.path.join("configs", "crop_box_cfgs", "box_config_temp.json")
@@ -98,6 +100,25 @@ def add_html_color_tag(text: str, color: str, bold: bool = False) -> str:
         return f"<font color={color}>{text}</font>"
     else:
         return f"<font color={color} style='font-weight:bold'>{text}</font>"
+
+
+def check_rtsp_available(ip, port) -> bool:
+    """
+    check if rtsp url is available
+    """
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(RTSP_WAIT_TIME)
+    try:
+        s.connect((ip, port))
+        print(f"rtsp {ip}:{port} is available")
+        s.shutdown(socket.SHUT_RDWR)
+        return True
+    except socket.error:
+        print(f"connecting {ip}:{port} error, after {RTSP_WAIT_TIME}s")
+        return False
+    finally:
+        s.close()
 
 
 def generate_pos(size: tuple, num_cam: int):
