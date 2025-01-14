@@ -1,5 +1,31 @@
 # EI6705-037-M01-DISTCAM
 
+## Introduction
+This project is a distributed camera system for the course project of EI6705-037-M01. The system is composed of several cameras and a central server. The cameras are used to capture the video stream and send it to the server. The server is used to process the video stream and control the cameras. Moreover, the system integrates AI models to detect and classify objects in the video stream, providing real-time video analysis.
+
+
+## Function Display
++ change video source
+
+  <img src="doc/figs/function/switch.gif" alt="PTZ Control" width="700" height="438">
+
++ smooth canvas scaling
+
+  <img src="doc/figs/function/scale.gif" alt="PTZ Control" width="700" height="438">
+
++ simulating PTZ control for one frame window
+
+  <img src="doc/figs/function/ptz-ctrl.gif" alt="PTZ Control" width="700" height="438">
+
++ activate yolov3 inference
+
+  <img src="doc/figs/function/yolov3.gif" alt="PTZ Control" width="700" height="438">
+
++ activate yolov11 inference, enabling tracking, setting restriction areas
+
+  <img src="doc/figs/function/yolov11.gif" alt="PTZ Control" width="700" height="438">
+
+
 ## SETUP
 ### 1. build enviroment
 + create a new virtual environment through `conda`
@@ -56,15 +82,16 @@ video source file located at `configs/video_source_pool.json`, the hierarchy of 
   python run.py --num_cam 2
   ```
 
-## DONE:
+## Version Iterations:
 ### v1: 
 + use `multiprocessing` for communication between Qt-page and camera
++ build basic layout, including view panel (left) and control panel (right)
++ basic control button: start streaming and exit
++ support connecting to IP-CAMERA on mobile through `rtsp`
++ add ctrl unit supporting basic PTZ control: 8 directions rotation(can)
+  ![local](doc/figs/layout/v1.PNG)  
 
 ### v2: 
-+ add ctrl unit supporting basic PTZ control: 8 directions rotation(can)
-
-
-### v3: 
 + stablize input video stream using `threading`, make it really 'real time', now it running with delay
 + add `data panel` to show realtime frame rate and drop rate
 + add option of taking videos or picture of one or more cameras simultaneously, by using button `select` to select cameras first then using `capture` or `record`
@@ -72,22 +99,28 @@ video source file located at `configs/video_source_pool.json`, the hierarchy of 
 + add path select unit for file saving through `SEL_PATH`, and the path will be shown in textbrowser above it
 + redirect output prompt from terminal to `Output` text browser in Qt_ui page
 + add button `view` in order to check specfic camera in full screen mode(in view panel zone), subsequent click will recover to status of multi-camera view
+  ![local](doc/figs/layout/v2.PNG) 
 
-## UNDER CONSTRUCTION
-+ other necessary data in panel
-+ other control such as adjust resolution
-+ set max frame window size
 
-## PREVIEW 
-+ v2: ![local](doc/figs/layout/v2.png) 
-+ v3: ![local](doc/figs/layout/v3.PNG) 
+### v3: 
++ re-construct repo architecture, using `queue` in `multiprocessing` and `threading`, replacing `shareMemory` and supporting more flexible scaleing and maintainability
++ add `set_save_prefer`, where users can assign the interest area in the image, and the area will be saved in the video or picture
++ add `model_inference` in menu bar, where users can select a model and run inference on the selected camera
++ other improvements: scale the layout, show/hide some tool bars.
+  ![local](doc/figs/layout/v3.PNG) 
 
-## FUNC
-<video width="816" height="438" controls>
-  <source src="doc/figs/function/full_view.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+### v4:
++ add a new tool bar that showing realtime-detection result of `yolov3` and `yolov11`
++ remove redundant `sel_path` button
++ support set hyper parameters for `yolov3` and `yolov11` in `model_selection` window
++ save all hyper parameters in some neat config files.
++ support smooth window scaling when mainwindow size changed
+  ![local](doc/figs/layout/v4.PNG) 
 
-+ new model selection window
- 
-  ![local](doc/figs/layout/model_sel_new.PNG) 
+### v5:
++ use `qdarkstyle` to make the UI more beautiful
++ support showing log info in `Output` text browser, while saving as `.log` file
++ add `inference cost` stats in realtime data panel
++ fix bugs for model selection function
++ support set restriction area by dragging anchers in `model_selection` window
+  ![local](doc/figs/layout/v5.PNG) 

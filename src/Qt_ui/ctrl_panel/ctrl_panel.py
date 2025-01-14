@@ -102,7 +102,7 @@ class ctrl_panel(QToolBar):
         """
 
         for cmd in self.support_PTZ:
-            self.ctrl_btn_lst[cmd] = ctrl_btn(parent, f"Qt_ui/ctrl_panel/icon/icon_PTZ_{cmd}.png", cmd)
+            self.ctrl_btn_lst[cmd] = ctrl_btn(parent, f"src/Qt_ui/ctrl_panel/icon/icon_PTZ_{cmd}.png", cmd)
 
         for btn in self.ctrl_btn_lst.values():
             btn: ctrl_btn
