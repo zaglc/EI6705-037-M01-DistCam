@@ -3,12 +3,7 @@ from multiprocessing import Queue
 from queue import Queue as TQueue
 
 import numpy as np
-from PyQt6.QtCore import (
-    QMutex,
-    QObject,
-    QThread,
-    pyqtSignal,
-)
+from PyQt6.QtCore import QMutex, QObject, QThread, pyqtSignal
 
 from src.Qt_ui.utils import (
     FV_CAPTURE_IMAGE_Q,
@@ -180,7 +175,7 @@ class QThread4VideoDisplay(QThread):
 
             # trigger data table updating
             self.realtime_tab_singal.emit(
-                (self.id, max(time4 - time0, 0.02), ret_val if drop_flag else 0, model_inference_cost*1000)
+                (self.id, max(time4 - time0, 0.02), ret_val if drop_flag else 0, model_inference_cost * 1000)
             )
             time0 = time4
 

@@ -1,25 +1,24 @@
 import sys
-from typing import Dict, List
+import time
 from functools import partial
 from threading import Thread
-import time
+from typing import Dict, List
 
+import matplotlib.pyplot as plt
 import numpy as np
-from PyQt6.QtCore import Qt, QTimer, QMutex
+from matplotlib.axes import Axes
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+from PyQt6.QtCore import QMutex, Qt, QTimer
 from PyQt6.QtWidgets import (
+    QApplication,
+    QGraphicsScene,
+    QGraphicsView,
     QTabWidget,
     QToolBar,
-    QWidget,
-    QApplication,
     QVBoxLayout,
-    QGraphicsView,
-    QGraphicsScene
+    QWidget,
 )
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-import matplotlib.pyplot as plt
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
-
 
 __tabs__ = ["Current Frame Obj", "Cumulative New Obj"]
 # number of frames to show, from current frame
@@ -46,11 +45,11 @@ class _Fixed_QGraphicsView(QGraphicsView):
 
 class Stats_Visualize(QToolBar):
     def __init__(
-        self, 
+        self,
         parent: QWidget,
-        camera_names: List[str], 
-        unittest=False, 
-        classes_of_interest: Dict[int, str] = {0: "person", 2: "car"}
+        camera_names: List[str],
+        unittest=False,
+        classes_of_interest: Dict[int, str] = {0: "person", 2: "car"},
     ):
         super().__init__(parent)
         self.classes_of_interest = {k: classes_of_interest[k] for k in list(classes_of_interest.keys())[:MAX_CLASSES]}
@@ -61,7 +60,7 @@ class Stats_Visualize(QToolBar):
 
         # 创建布局
         outer = QTabWidget(self)
-        self.outer_tab = outer 
+        self.outer_tab = outer
         self.addWidget(outer)
         self.setMinimumSize(600, 150)
 
@@ -98,17 +97,20 @@ class Stats_Visualize(QToolBar):
             self.figure_lst.append(figure)
             self.canvas_lst.append(canvas)
             self.axs_lst.append({k: v for k, v in zip(__tabs__, axs)})
-            
+
             # init data
             self._init_data_and_draw_fig(i, figure)
-        
+
         outer.currentChanged.connect(self.tab_changed_slot)
         outer.setCurrentIndex(0)
 
         # set timer for unit test
         if unittest:
             self.current_cache_frame = [0 for _ in range(self.num_cam)]
-            self.temp_data_packets_lst = [{k: {c: 0 for c in self.classes_of_interest.values()} for k in __tabs__} for _ in range(len(camera_names))]
+            self.temp_data_packets_lst = [
+                {k: {c: 0 for c in self.classes_of_interest.values()} for k in __tabs__}
+                for _ in range(len(camera_names))
+            ]
             self.timer = QTimer(self)
             self.timer.timeout.connect(partial(self.update_data_slot))
             self.timer.start(100)
@@ -117,18 +119,23 @@ class Stats_Visualize(QToolBar):
     def _init_data_and_draw_fig(self, cam_id: int, figure: Figure):
 
         # data for different axs: number of objs per class in class of interest
-        data: Dict[str, Dict[str, List[int]]] = {k: {c: [0 for _ in range(SHOWING_FRAME_NUMBER + BORDER_NUMBER)] for c in self.classes_of_interest.values()} for k in __tabs__}
+        data: Dict[str, Dict[str, List[int]]] = {
+            k: {c: [0 for _ in range(SHOWING_FRAME_NUMBER + BORDER_NUMBER)] for c in self.classes_of_interest.values()}
+            for k in __tabs__
+        }
         # cache: per FRAME_INTERVAL an update
-        data_cache: Dict[str, Dict[str, List[int]]] = {k: {c: [] for c in self.classes_of_interest.values()} for k in __tabs__}
+        data_cache: Dict[str, Dict[str, List[int]]] = {
+            k: {c: [] for c in self.classes_of_interest.values()} for k in __tabs__
+        }
         plt_objs: Dict[str, Dict[str, plt.Line2D]] = {k: {} for k in __tabs__}
 
         # initialize figure
         hd = []
         for idx, ((title, ax), sub_data) in enumerate(zip(self.axs_lst[cam_id].items(), data.values())):
             ax.cla()
-            x_data = list(range(-SHOWING_FRAME_NUMBER-BORDER_NUMBER+1, 1, 1))
+            x_data = list(range(-SHOWING_FRAME_NUMBER - BORDER_NUMBER + 1, 1, 1))
             for label, y_data in sub_data.items():
-                plt_obj, = ax.plot(x_data, y_data, label=label, linewidth=3)
+                (plt_obj,) = ax.plot(x_data, y_data, label=label, linewidth=3)
                 plt_objs[title].update({label: plt_obj})
                 if idx == 0:
                     hd.append(plt_obj)
@@ -140,11 +147,19 @@ class Stats_Visualize(QToolBar):
             ax.yaxis.tick_right()
             ax.set_ylabel("Number of Objects")
             ax.set_title(title)
-            ax.axvline(x=0, color='r', linestyle='--')
+            ax.axvline(x=0, color="r", linestyle="--")
             ax.grid("on")
         figure.subplots_adjust(wspace=0.3, bottom=0.17, left=0.13)
         figure.legends.clear()
-        figure.legend(handles=hd, bbox_to_anchor=(0.11, 0.9), ncol=1, handlelength=1, handletextpad=0.3, labelspacing=0.1 , columnspacing=0.7)
+        figure.legend(
+            handles=hd,
+            bbox_to_anchor=(0.11, 0.9),
+            ncol=1,
+            handlelength=1,
+            handletextpad=0.3,
+            labelspacing=0.1,
+            columnspacing=0.7,
+        )
 
         self.data_lst[cam_id] = data
         self.data_cache_lst[cam_id] = data_cache
@@ -155,7 +170,9 @@ class Stats_Visualize(QToolBar):
         when new detection data arrived, update the data and plot
         """
 
-        assert (modify_idx is None and current_frame is None and count_packet is None) or (modify_idx is not None and current_frame is not None and count_packet is not None)
+        assert (modify_idx is None and current_frame is None and count_packet is None) or (
+            modify_idx is not None and current_frame is not None and count_packet is not None
+        )
 
         for i, n in enumerate(self.names):
             # they must be modified in atomic manner
@@ -183,18 +200,25 @@ class Stats_Visualize(QToolBar):
 
             data_packets = temp_data_packets
             for title, new_data in data_packets.items():
-                if new_data is None: continue
+                if new_data is None:
+                    continue
                 for label, count in new_data.items():
                     if label in data_cache[title]:
                         data_cache[title][label].append(count)
             self.update_count[i] += 1
-            
+
             if self.update_count[i] % FRAME_INTERVAL == 0:
                 self.update_count[i] = 0
                 # update data storage
                 for title, new_data in data_cache.items():
                     for label, count_lst in new_data.items():
-                        d = 0 if not len(count_lst) else count_lst[-1] if title == "Cumulative New Obj" else sum(count_lst) / FRAME_INTERVAL
+                        d = (
+                            0
+                            if not len(count_lst)
+                            else count_lst[-1]
+                            if title == "Cumulative New Obj"
+                            else sum(count_lst) / FRAME_INTERVAL
+                        )
                         # print(f"update {title} {label} with {d}")
                         # print(self.data_lst)
                         self.data_lst[i][title][label].pop(0)
@@ -202,7 +226,7 @@ class Stats_Visualize(QToolBar):
                         count_lst.clear()
                 if self.active_cam != i:
                     continue
-                
+
                 # update plot
                 for (title, ax), idata in zip(axs.items(), data.values()):
                     new_ylim = []
@@ -218,7 +242,7 @@ class Stats_Visualize(QToolBar):
                     old_ylim = [int(a) for a in ax.get_ylim()]
                     if old_ylim != new_ylim:
                         ax.set_ylim(new_ylim)
-                
+
                 # refresh the canvas
                 self.figure_lst[i]
                 canvas.draw()
@@ -231,7 +255,9 @@ class Stats_Visualize(QToolBar):
 
         self.active_cam = self.outer_tab.currentIndex()
 
-    def reset_figure(self, classes_of_interest: Dict[int, str] = None, camera_names: List[str] = None, cam_id: int = None):
+    def reset_figure(
+        self, classes_of_interest: Dict[int, str] = None, camera_names: List[str] = None, cam_id: int = None
+    ):
         """
         reset figure if video source config changes, incoked when:
         1. model type change
@@ -269,16 +295,17 @@ class Stats_Visualize(QToolBar):
         #     graphics.setScene(scene)
         #     self.scene_lst[i] = scene
         #     self.canvas_lst[i] = canvas
-            
+
         #     canvas.draw()
-            
+
         return super().resizeEvent(event)
 
 
 if __name__ == "__main__":
 
     classes_of_interest = {0: "person", 2: "car"}
-    names = ["v1"]#, "v2"]
+    names = ["v1"]  # , "v2"]
+
     def unit_test_change_data():
         data_packets = {k: {c: 0 for c in classes_of_interest.values()} for k in __tabs__}
         while True:

@@ -1,14 +1,15 @@
-import sys, os
+import os
+import sys
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QApplication,
     QGridLayout,
     QHeaderView,
     QTableWidget,
     QTableWidgetItem,
     QToolBar,
     QWidget,
-    QApplication,
 )
 
 sys.path.append(os.getcwd())

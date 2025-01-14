@@ -1,7 +1,9 @@
 import ctypes
 import datetime
 import json
-import os, sys
+import os
+import sys
+
 sys.path.append(os.getcwd())
 import time
 from multiprocessing import Queue
@@ -13,7 +15,7 @@ from typing import Dict, List
 import cv2
 import numpy as np
 
-from src.Qt_ui.utils import BOX_JSON_PATH, HIKVISION, LOCAL_VID, IP_CAM
+from src.Qt_ui.utils import BOX_JSON_PATH, HIKVISION, IP_CAM, LOCAL_VID
 
 
 class Viewer:

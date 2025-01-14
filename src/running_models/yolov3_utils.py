@@ -13,6 +13,7 @@ MAX_TRACK_LENGTH = 80
 ALERT_COLOR = (255, 0, 0)
 NORMAL_COLOR = (0, 255, 0)
 
+
 def load_classes(path):
     # Loads *.names file at 'path'
     with open(path, "r") as f:
@@ -134,12 +135,8 @@ def non_max_suppression(prediction, conf_thres=0.1, iou_thres=0.6, multi_label=T
 def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None):
     # Rescale coords (xyxy) from img1_shape to img0_shape
     if ratio_pad is None:  # calculate from img0_shape
-        gain = min(
-            img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1]
-        )  # gain  = old / new
-        pad = (img1_shape[1] - img0_shape[1] * gain) / 2, (
-            img1_shape[0] - img0_shape[0] * gain
-        ) / 2  # wh padding
+        gain = min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])  # gain  = old / new
+        pad = (img1_shape[1] - img0_shape[1] * gain) / 2, (img1_shape[0] - img0_shape[0] * gain) / 2  # wh padding
     else:
         gain = ratio_pad[0][0]
         pad = ratio_pad[1]
@@ -178,7 +175,7 @@ def plot_trajectory(xyxy, img, tid, track_history, traj_colors):
     # Plots trajectory on image
     if tid != -1:
         tl = round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1
-        cx, cy = int((xyxy[0]+xyxy[2])/2), int((xyxy[1]+xyxy[3])/2)
+        cx, cy = int((xyxy[0] + xyxy[2]) / 2), int((xyxy[1] + xyxy[3]) / 2)
         track_history[tid].append((cx, cy))
         if len(track_history[tid]) > MAX_TRACK_LENGTH:
             track_history[tid].pop(0)
@@ -207,7 +204,7 @@ def letterbox(img, new_shape=(416, 416), color=(114, 114, 114), stride=32):
     if isinstance(new_shape, int):
         new_shape = np.ceil(new_shape / stride) * stride
         new_shape = (new_shape, new_shape)
-    
+
     # Scale ratio (new / old)
     r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
 
@@ -223,7 +220,5 @@ def letterbox(img, new_shape=(416, 416), color=(114, 114, 114), stride=32):
         img = cv2.resize(img, new_unpad[::-1], interpolation=cv2.INTER_LINEAR)
     top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
     left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-    img = cv2.copyMakeBorder(
-        img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color
-    )
+    img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
     return img

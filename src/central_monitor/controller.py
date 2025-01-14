@@ -25,7 +25,7 @@ from src.central_monitor.HCNetSDK import (
     byref,
     system_get_platform_info,
 )
-from src.Qt_ui.utils import HIKVISION, LOCAL_VID, IP_CAM
+from src.Qt_ui.utils import HIKVISION, IP_CAM, LOCAL_VID
 
 __video_sources__ = [IP_CAM, HIKVISION, LOCAL_VID]
 

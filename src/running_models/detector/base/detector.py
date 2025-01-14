@@ -4,7 +4,10 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
-from src.running_models.detector.base.detect_result import DetectionResult, create_detection_result
+from src.running_models.detector.base.detect_result import (
+    DetectionResult,
+    create_detection_result,
+)
 
 
 class YOLODetector:
@@ -24,7 +27,9 @@ class YOLODetector:
         self.model = YOLO(self.weights).to(self.device)
         self.frame_index = 0
 
-    def _predict_one_frame(self, frame: np.ndarray, conf_thre: float, iou_thre: float, imgsz: int) -> List[DetectionResult]:
+    def _predict_one_frame(
+        self, frame: np.ndarray, conf_thre: float, iou_thre: float, imgsz: int
+    ) -> List[DetectionResult]:
         """
         Performs object detection and tracking on a single frame.
 

@@ -1,14 +1,36 @@
-from PyQt6.QtWidgets import QApplication, QDialog, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsEllipseItem, QGraphicsItem, QGraphicsLineItem, QLabel, QWidget, QGraphicsPolygonItem, QFormLayout, QHBoxLayout, QLineEdit, QGraphicsPixmapItem, QGroupBox, QDialogButtonBox, QVBoxLayout, QTabWidget
-from PyQt6.QtGui import QPen, QColor, QPixmap, QPolygonF, QCursor, QDoubleValidator
-from PyQt6.QtCore import Qt, QRectF, QPointF, QPoint, pyqtSignal
-
-from typing import List
 import math
-import os, sys
+import os
+import sys
 from functools import partial
+from typing import List
+
+from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QCursor, QDoubleValidator, QPen, QPixmap, QPolygonF
+from PyQt6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QGraphicsEllipseItem,
+    QGraphicsItem,
+    QGraphicsLineItem,
+    QGraphicsPixmapItem,
+    QGraphicsPolygonItem,
+    QGraphicsRectItem,
+    QGraphicsScene,
+    QGraphicsView,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 sys.path.append(os.getcwd())
 from src.Qt_ui.utils import FRAME_RATIO
+
 
 class DraggableRectItem(QGraphicsRectItem):
     """
@@ -17,10 +39,12 @@ class DraggableRectItem(QGraphicsRectItem):
 
     def __init__(self, x, y, size, idx, outer, parent=None):
         super().__init__(x, y, size, size, parent)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable |
-                     QGraphicsItem.GraphicsItemFlag.ItemIsFocusable | 
-                     QGraphicsItem.GraphicsItemFlag.ItemIsSelectable |
-                     QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
+        self.setFlag(
+            QGraphicsItem.GraphicsItemFlag.ItemIsMovable
+            | QGraphicsItem.GraphicsItemFlag.ItemIsFocusable
+            | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable
+            | QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges
+        )
 
         self._w = size
         self._h = size
@@ -47,11 +71,11 @@ class DraggableRectItem(QGraphicsRectItem):
             basex = self.x()
         if basey is None:
             basey = self.y()
-        return QPointF(self.x_offset + basex + self._w/2, self.y_offset + basey + self._h/2)
-    
+        return QPointF(self.x_offset + basex + self._w / 2, self.y_offset + basey + self._h / 2)
+
     def reverse_base_pos(self, outerx=0, outery=0):
 
-        return QPointF(outerx - self.x_offset - self._w/2, outery - self.y_offset - self._h/2)
+        return QPointF(outerx - self.x_offset - self._w / 2, outery - self.y_offset - self._h / 2)
 
     def w(self):
         return self._w, self.acceptHoverEvents
@@ -60,16 +84,31 @@ class DraggableRectItem(QGraphicsRectItem):
         return self._h
 
     def itemChange(self, change, value):
-        if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange or change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+        if (
+            change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
+            or change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged
+        ):
             # limit x and y's coordinates
             new_pos = value
-            center_pos = QPointF(QPoint(int(new_pos.x() + self._w/2 + self.x_offset), int(new_pos.y() + self._h/2 + self.y_offset)))
+            center_pos = QPointF(
+                QPoint(int(new_pos.x() + self._w / 2 + self.x_offset), int(new_pos.y() + self._h / 2 + self.y_offset))
+            )
             # print("begin", new_pos, center_pos)
             rect = self.scene().sceneRect()
             if not rect.contains(center_pos) and not self.change_from_text:
-                new_pos.setX(min(rect.right() - self._w/2 - self.x_offset, max(rect.left() - self._w/2 - self.x_offset, new_pos.x())))
-                new_pos.setY(min(rect.bottom() - self._h/2 - self.y_offset, max(rect.top() - self._h/2 - self.y_offset, new_pos.y())))
-            
+                new_pos.setX(
+                    min(
+                        rect.right() - self._w / 2 - self.x_offset,
+                        max(rect.left() - self._w / 2 - self.x_offset, new_pos.x()),
+                    )
+                )
+                new_pos.setY(
+                    min(
+                        rect.bottom() - self._h / 2 - self.y_offset,
+                        max(rect.top() - self._h / 2 - self.y_offset, new_pos.y()),
+                    )
+                )
+
             if self.auto_align and not self.change_from_text:
                 if not self.has_reference_point:
                     is_horizontal, val = self.outer.find_nearest_point(self.idx)
@@ -91,14 +130,14 @@ class DraggableRectItem(QGraphicsRectItem):
 
             if hasattr(self.outer, "show_func"):
                 self.outer.show_func(self.outer.get_coords())
-                        
+
             return new_pos
 
         return super().itemChange(change, value)
-    
+
     def distance_to(self, point: QPointF):
         return math.sqrt((self.base_pos().x() - point.x()) ** 2 + (self.base_pos().y() - point.y()) ** 2)
-    
+
     def mousePressEvent(self, event):
         self.has_reference_point = False
         self.setCursor(QCursor(Qt.CursorShape.ClosedHandCursor))
@@ -119,6 +158,7 @@ class DraggableAreaWidget(QWidget):
     """
 
     pointChange = pyqtSignal(tuple)
+
     def __init__(self, scene, poly=4, size=10, parent=None):
         super().__init__(parent)
         self.poly = poly
@@ -135,14 +175,14 @@ class DraggableAreaWidget(QWidget):
         init = None if len(init_polys) == 0 else init_polys[0]
         if init is not None:
             assert len(init) == self.poly, f"init polys: {len(init)} should have the same length as poly: {self.poly}"
-        
+
         for i in range(self.poly):
             if init is None:
-                x = cx + size * math.cos(2 * math.pi * i / self.poly) - self.dragpint_size/2
-                y = cy + size * math.sin(2 * math.pi * i / self.poly) - self.dragpint_size/2
+                x = cx + size * math.cos(2 * math.pi * i / self.poly) - self.dragpint_size / 2
+                y = cy + size * math.sin(2 * math.pi * i / self.poly) - self.dragpint_size / 2
             else:
-                x = init[i][0] * w - self.dragpint_size/2
-                y = init[i][1] * h - self.dragpint_size/2
+                x = init[i][0] * w - self.dragpint_size / 2
+                y = init[i][1] * h - self.dragpint_size / 2
             self._addPoint(x, y, i)
         self.rectItem = QGraphicsPolygonItem(QPolygonF([self[i].base_pos(0, 0) for i in range(self.poly)]))
         self.rectItem.setBrush(QColor(255, 0, 0, 50))
@@ -159,7 +199,7 @@ class DraggableAreaWidget(QWidget):
 
     def __len__(self):
         return len(self._draggableRectItem_lst)
-    
+
     def set_auto_align(self, auto_align: bool):
         """
         'shift' key slot by outer QWidget
@@ -178,16 +218,20 @@ class DraggableAreaWidget(QWidget):
 
         # find nearest point
         fixed_position = self[point_idx].base_pos()
-        nearest_idx = min([i for i in range(self.poly) if i != point_idx], key=lambda i: self[i].distance_to(fixed_position))
-        
-        is_horizontal = abs(self[point_idx].base_pos().x() - self[nearest_idx].base_pos().x()) < abs(self[point_idx].base_pos().y() - self[nearest_idx].base_pos().y())
+        nearest_idx = min(
+            [i for i in range(self.poly) if i != point_idx], key=lambda i: self[i].distance_to(fixed_position)
+        )
+
+        is_horizontal = abs(self[point_idx].base_pos().x() - self[nearest_idx].base_pos().x()) < abs(
+            self[point_idx].base_pos().y() - self[nearest_idx].base_pos().y()
+        )
         if is_horizontal:
             val = self[nearest_idx].base_pos().x()
         else:
             val = self[nearest_idx].base_pos().y()
 
         return is_horizontal, val
-    
+
     def get_coords(self, size=None):
         """
         format: list of tuple int
@@ -197,8 +241,8 @@ class DraggableAreaWidget(QWidget):
             xx, yy = size
         else:
             xx, yy = 1, 1
-        return [(self[i].base_pos().x()/xx, self[i].base_pos().y()/yy) for i in range(self.poly)]
-    
+        return [(self[i].base_pos().x() / xx, self[i].base_pos().y() / yy) for i in range(self.poly)]
+
     def set_show_func(self, func):
         """
         binding function in XY_coords
@@ -211,8 +255,10 @@ class Draggable_previewWidget(QWidget):
     def __init__(self, init_polys=[], poly=4, qimage=None, parent=None, height=360):
         super().__init__(parent)
         # 创建一个 QLabel 对象，作为背景
-        pixmap = QPixmap(os.path.join("doc", "figs", "layout", "v2.png")) if qimage is None else QPixmap.fromImage(qimage)
-    
+        pixmap = (
+            QPixmap(os.path.join("doc", "figs", "layout", "v2.png")) if qimage is None else QPixmap.fromImage(qimage)
+        )
+
         # 创建一个 QGraphicsScene 对象
         scene = QGraphicsScene()
         scene.setBackgroundBrush(QColor(255, 0, 0, 0))
@@ -222,7 +268,7 @@ class Draggable_previewWidget(QWidget):
         view_size, ratio = (int(FRAME_RATIO * height), height), 0.95
         inner_view_size = (int(view_size[0] * ratio), int(view_size[1] * ratio))
         view = QGraphicsView(scene, self)
-        view.setGeometry(0, 0, pixmap.width()//2, pixmap.height()//2)
+        view.setGeometry(0, 0, pixmap.width() // 2, pixmap.height() // 2)
         view.setMinimumSize(*view_size)
         view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -305,10 +351,11 @@ class XY_coord(QWidget):
             y = self.flayouty.itemAt(i, QFormLayout.ItemRole.FieldRole).widget().text()
             if x == "" or y == "":
                 return None
-            x, y = float(x), float(y)            
+            x, y = float(x), float(y)
             points.append((round(x * self.scene_size[0]), round(y * self.scene_size[1])))
-        
+
         return points
+
 
 class Advanced_window(QDialog):
     def __init__(self, num_cam: int, names: List[str], init_polygons, poly=4, qimage_lst=None):
@@ -320,7 +367,14 @@ class Advanced_window(QDialog):
         # preview window
         self.preview_lst: List[Draggable_previewWidget] = []
         for i in range(self.num_cam):
-            self.preview_lst.append(Draggable_previewWidget(init_polys=init_polygons[i], poly=poly, qimage=qimage_lst[i] if qimage_lst is not None else None, parent=self))
+            self.preview_lst.append(
+                Draggable_previewWidget(
+                    init_polys=init_polygons[i],
+                    poly=poly,
+                    qimage=qimage_lst[i] if qimage_lst is not None else None,
+                    parent=self,
+                )
+            )
 
         # preview arranged in tab
         self.preview_tab = QTabWidget()
@@ -338,23 +392,23 @@ class Advanced_window(QDialog):
             self.xy_coord.ylines_list[i].textChanged.connect(partial(self.update_points_coord_slot, i))
         self.xy_coord.buttonbox.accepted.connect(self.accept)
         self.xy_coord.buttonbox.rejected.connect(self.reject)
-        
+
         hbox = QHBoxLayout()
         hbox.addWidget(self.preview_tab)
         hbox.addWidget(self.xy_coord)
         self.setLayout(hbox)
-        
+
     def keyPressEvent(self, a0):
 
         if a0.key() == Qt.Key.Key_Shift:
             self.preview_lst[self.current_active].points.set_auto_align(True)
         return super().keyPressEvent(a0)
-    
+
     def keyReleaseEvent(self, a0):
         if a0.key() == Qt.Key.Key_Shift:
             self.preview_lst[self.current_active].points.set_auto_align(False)
         return super().keyReleaseEvent(a0)
-    
+
     def update_points_coord_slot(self, tar_idx: int):
         """
         when value in lineEdit change, change position of point
@@ -376,16 +430,18 @@ class Advanced_window(QDialog):
         self.xy_coord.show_xycoords_slot(self.preview_lst[self.current_active].points.get_coords())
 
     def exec(self):
-        
+
         ret = QDialog.exec(self)
         points_lst = []
         for i in range(self.num_cam):
-            points_lst.append([self.preview_lst[i].points.get_coords(self.preview_lst[self.current_active].inner_view_size)])
+            points_lst.append(
+                [self.preview_lst[i].points.get_coords(self.preview_lst[self.current_active].inner_view_size)]
+            )
 
         return ret, points_lst
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app = QApplication([])
     window = Advanced_window(2, ["test1", "test2"])
     window.resize(700, 300)

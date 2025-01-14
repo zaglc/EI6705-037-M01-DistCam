@@ -1,25 +1,25 @@
+import os
+import random
 from collections import defaultdict
 from typing import List
-import random
-import os
 
+import cv2
 import numpy as np
 import torch
-import cv2
 from shapely.geometry import Polygon
 
 from src.running_models.detector.advanced.counter import ObjectCounter
-from yolov3.models import Darknet
 from src.running_models.yolov3_utils import (
+    fill_restrict_area,
     letterbox,
     load_classes,
     non_max_suppression,
     plot_one_box,
+    plot_trajectory,
     scale_coords,
     xywh2xyxy,
-    plot_trajectory,
-    fill_restrict_area,
 )
+from yolov3.models import Darknet
 
 YOLOV3_DETECT = "yolov3-detect"
 YOLOV11_TRACK = "yolov11-track"
@@ -75,17 +75,20 @@ class Engine:
 
                 if not os.path.exists(os.path.dirname(weight)):
                     os.mkdir(os.path.dirname(weight))
-                model = [ObjectCounter(
-                    device=self.device,
-                    weights=weight,
-                    classes_of_interest=self.classes,
-                    log_file=self.log_file,
-                    cam_id=i,
-                ) for i in range(self.num_cam)]
+                model = [
+                    ObjectCounter(
+                        device=self.device,
+                        weights=weight,
+                        classes_of_interest=self.classes,
+                        log_file=self.log_file,
+                        cam_id=i,
+                    )
+                    for i in range(self.num_cam)
+                ]
                 print(f"Finish initialize {model_type}")
             else:
                 model = None
-            
+
             self.model_pool[model_type] = model
 
     def __call__(self, chunk_tsr, **kwargs):
@@ -107,7 +110,9 @@ class Engine:
             with torch.no_grad():
                 for cam_id, input in chunk_tsr:
                     cam_id: int
-                    pred = self.model[cam_id].online_predict(input, conf_thre=self.conf_thre, iou_thre=self.iou_thre, imgsz=self.img_size)
+                    pred = self.model[cam_id].online_predict(
+                        input, conf_thre=self.conf_thre, iou_thre=self.iou_thre, imgsz=self.img_size
+                    )
                     results.append(pred)
         else:
             results = [None] * len(chunk_tsr)
@@ -175,7 +180,9 @@ def preprocess_img(ori_img: np.ndarray, img_size: int, type: str):
     return img, shape
 
 
-def process_result(ori_img: np.ndarray, det, classes, colors, new_shape, type, selected_class, traj_colors, track_history, polygons):
+def process_result(
+    ori_img: np.ndarray, det, classes, colors, new_shape, type, selected_class, traj_colors, track_history, polygons
+):
     """
     render results on original image
     polygons: list of polygons -> list of vertices
@@ -217,6 +224,5 @@ def process_result(ori_img: np.ndarray, det, classes, colors, new_shape, type, s
             count_current_frame = {classes[k]: 0 for k in selected_class}
 
         cnt_packet = (count_current_frame, cumulative_counts)
-
 
     return ori_img, cnt_packet

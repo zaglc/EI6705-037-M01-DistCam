@@ -11,8 +11,8 @@ from PyQt6.QtWidgets import (
     QDialog,
     QMainWindow,
     QScrollArea,
-    QToolBar,
     QStatusBar,
+    QToolBar,
     QVBoxLayout,
     QWidget,
 )
@@ -25,12 +25,12 @@ from src.Qt_ui.data_panel.model_stats_visual_panel import Stats_Visualize
 from src.Qt_ui.terminal_panel.output_log import terminal
 from src.Qt_ui.utils import (
     BOX_JSON_PATH,
+    FRAME_RATIO,
     MODEL_JSON_PATH,
     RS_RUNNING,
     RS_STOP,
     RS_WAITING,
     VIDEO_SOURCE_POOL_PATH,
-    FRAME_RATIO,
     compute_best_size4view_panel,
 )
 from src.Qt_ui.view_panel.display import Ui_MainWindow as dis_win
@@ -47,7 +47,7 @@ class custom_window(QMainWindow):
         ctrl panel
     """
 
-    def __init__(self, gpc: dict, curtime: datetime.datetime, selected_classes = {0: "person", 2: "car"}):
+    def __init__(self, gpc: dict, curtime: datetime.datetime, selected_classes={0: "person", 2: "car"}):
         """
         Args:
             gpc: global process context such as frame_buffer, condition vars
@@ -101,7 +101,9 @@ class custom_window(QMainWindow):
             win.ctrl_select_btn_signal.connect(self.ctrl_select_btn_slot)
             win.frame_thread.camera_capture_recover_signal.connect(self.camera_cap2rec_btn_recover_slot)
             win.switch_cha.clicked.connect(partial(self.switch_video_source_outer_slot, idx))
-            win.frame_thread.switch_btn_recover_signal.connect(partial(self.update_resolution_after_switch_slot, id=idx))
+            win.frame_thread.switch_btn_recover_signal.connect(
+                partial(self.update_resolution_after_switch_slot, id=idx)
+            )
 
         # ctw has only children: scroll area; scroll area has no margin with dis
         self.scroll_area = QScrollArea(ctw)
@@ -394,7 +396,7 @@ class custom_window(QMainWindow):
             self.model_status == RS_RUNNING,
             self.selected_classes,
             self.polygons,
-            preview_lst
+            preview_lst,
         )
 
         ret = dialog.exec()
@@ -414,7 +416,17 @@ class custom_window(QMainWindow):
             self.selected_classes = selected_class
 
             # set unify model config across cameras
-            small_polygons = [[[(round(img_size * pp[0]), round(img_size / FRAME_RATIO * pp[1])) for pp in poly] for poly in camera_p] for camera_p in polygons] if enable_adv else [[] for _ in range(self.num_cam)]
+            small_polygons = (
+                [
+                    [
+                        [(round(img_size * pp[0]), round(img_size / FRAME_RATIO * pp[1])) for pp in poly]
+                        for poly in camera_p
+                    ]
+                    for camera_p in polygons
+                ]
+                if enable_adv
+                else [[] for _ in range(self.num_cam)]
+            )
             hyper_params_dict = {
                 "conf_thre": conf_thre,
                 "iou_thre": iou_thre,
@@ -426,13 +438,26 @@ class custom_window(QMainWindow):
             # print(hyper_params_dict)
             for queue in self.data_queues:
                 queue.put((0, self.model_status, None, hyper_params_dict))
-            
+
             # in each cam, poly is original size, while in model it is scaled
-            origin_polygons = [[[(round(pp[0] * r[0]), round(pp[1] * r[1])) for pp in poly] for poly in camera_p] for r, camera_p in zip(self.resolution, polygons)] if enable_adv else [[] for _ in range(self.num_cam)]
+            origin_polygons = (
+                [
+                    [[(round(pp[0] * r[0]), round(pp[1] * r[1])) for pp in poly] for poly in camera_p]
+                    for r, camera_p in zip(self.resolution, polygons)
+                ]
+                if enable_adv
+                else [[] for _ in range(self.num_cam)]
+            )
             for idx, win in enumerate(self.dis.videoWin):
                 win.switch_cam_lock.lock()
                 win.frame_thread.model_flag = True
-                win.frame_thread.model_tuple = (current_model, is_active, origin_polygons[idx], img_size, list(selected_class.keys()))
+                win.frame_thread.model_tuple = (
+                    current_model,
+                    is_active,
+                    origin_polygons[idx],
+                    img_size,
+                    list(selected_class.keys()),
+                )
                 win.switch_cam_lock.unlock()
 
         dialog.destroy()
@@ -513,7 +538,6 @@ class custom_window(QMainWindow):
         self.resolution[id] = resolution
         # print(resolution)
 
-
     def resizeEvent(self, event):
         """
         show size message
@@ -554,7 +578,12 @@ class custom_window(QMainWindow):
             video_src_pool_pth = video_src_pool_pth.replace(".json", "_temp.json")
         infos = [self.dis.video_source_choice, self.dis.video_source_info]
         # print(infos)
-        infos[0] = [[ii[0], infos[1][ii[0]][ii[1]]["NICKNAME"]] if ii[0] == "local-vid" else ["local-vid", infos[1]["local-vid"][0]["NICKNAME"]] for ii in infos[0]]
+        infos[0] = [
+            [ii[0], infos[1][ii[0]][ii[1]]["NICKNAME"]]
+            if ii[0] == "local-vid"
+            else ["local-vid", infos[1]["local-vid"][0]["NICKNAME"]]
+            for ii in infos[0]
+        ]
         with open(video_src_pool_pth, "w") as f:
             json.dump({"choices": infos[0], "sources": infos[1]}, f, indent=4)
 

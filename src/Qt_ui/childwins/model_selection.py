@@ -1,12 +1,13 @@
 import json
 import os
 import sys
+
 sys.path.append(os.getcwd())
 from functools import partial
-from typing import List, Dict
+from typing import Dict, List
 
 from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtGui import QDoubleValidator, QIntValidator, QImage
+from PyQt6.QtGui import QDoubleValidator, QImage, QIntValidator
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -25,8 +26,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.running_models.extern_model import YOLOV11_TRACK
 from src.Qt_ui.childwins.advance_setting import Advanced_window
+from src.running_models.extern_model import YOLOV11_TRACK
 
 
 class ModelSelectionWindow(QDialog):
@@ -64,7 +65,7 @@ class ModelSelectionWindow(QDialog):
         self.class_length = len(class_names)
         self.class_names = class_names
         self.preview_lst = qimage_lst
-        
+
         self.setMinimumSize(QSize(450, 600))
         self.setWindowTitle("Set Inference Model")
         vbox = QVBoxLayout()
@@ -75,14 +76,14 @@ class ModelSelectionWindow(QDialog):
         self.model_select_comb.setCurrentText(current_active_model)
         self.model_select_comb.currentTextChanged.connect(self.model_select_slot)
         self.model_select_comb.setEnabled(not self._init_is_active)
-        
+
         self.enable_infer_box = QCheckBox("Enable Inference", self)
         self.enable_infer_box.setChecked(self.is_active)
         self.enable_infer_box.clicked.connect(self.click_ckbx_slot)
         self.enable_advance_box = QCheckBox("Enable Advanced", self)
         self.advance_setting_btn = QPushButton("Advanced Setting..", self)
         self.advance_setting_btn.clicked.connect(self.click_adv_setting_slot)
-        
+
         hbox0 = QHBoxLayout()
         hbox0.addWidget(self.enable_infer_box)
         hbox0.addWidget(self.enable_advance_box)
@@ -250,7 +251,9 @@ if __name__ == "__main__":
         model_config = json.load(f)
 
     app = QApplication(sys.argv)
-    window = ModelSelectionWindow(None, 2, ["test1", "test2"], model_config, "yolov3-detect", False, {0: "person", 2: "car"}, [[], []])
+    window = ModelSelectionWindow(
+        None, 2, ["test1", "test2"], model_config, "yolov3-detect", False, {0: "person", 2: "car"}, [[], []]
+    )
 
     ret = window.exec()
     print(ret)

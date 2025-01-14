@@ -1,5 +1,5 @@
 import json
-import os, sys
+import os
 import sys
 from functools import partial
 from typing import List
@@ -25,14 +25,20 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSizePolicy,
-    QSpinBox,
     QSpacerItem,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
 sys.path.append(os.getcwd())
-from src.Qt_ui.utils import add_html_color_tag, check_rtsp_available, RTSP_WAIT_TIME, IP_CAM, HIKVISION
+from src.Qt_ui.utils import (
+    HIKVISION,
+    IP_CAM,
+    RTSP_WAIT_TIME,
+    add_html_color_tag,
+    check_rtsp_available,
+)
 
 
 # TODO: NICKNAME不改

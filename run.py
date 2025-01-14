@@ -2,16 +2,17 @@ import argparse
 import json
 import os
 import sys
+
 sys.path.append(os.path.join("yolov3"))
-import time
 import datetime
+import time
 from multiprocessing import Process, Queue, current_process
 from queue import Empty
 from queue import Queue as TQueue
 from typing import List
 
-import numpy as np
 import cv2
+import numpy as np
 import qdarkstyle
 import setproctitle
 import torch
@@ -82,7 +83,9 @@ def model_Main(
     batch = min(local_num_cam, 1)
     running_status = RS_WAITING
     log_file = os.path.join("data", curtime.strftime("%Y-%m-%d_%H-%M-%S"), "advanced_yolo.log")
-    model, classes, colors, traj_colors, track_history = initialize_model_engine(local_num_cam, inference_device, model_config, log_file)
+    model, classes, colors, traj_colors, track_history = initialize_model_engine(
+        local_num_cam, inference_device, model_config, log_file
+    )
     for queue in result_queue:
         queue.put((classes, colors, traj_colors, track_history))
     model._hot_init()
@@ -119,7 +122,7 @@ def model_Main(
                         else:
                             # 'None' tsr represents model setting
                             model.set_model(**hyper_params_dict)
-                            break # avoid model discrepancy in one batch
+                            break  # avoid model discrepancy in one batch
                     else:
                         size = data_queue.qsize()
                         for _ in range(size):
@@ -212,7 +215,18 @@ def frame_Main(
             data_queue.put((camera.id, model_run, tsr, {}))
             try:
                 (result,) = result_queue.get(timeout=WAITING_TIME * 100)  # Large but not blocking in case of deadlock
-                frame, cnt_pkt = process_result(frame, result, classes, colors, new_shape, model_type, selected_class, traj_colors, track_history, polygons)
+                frame, cnt_pkt = process_result(
+                    frame,
+                    result,
+                    classes,
+                    colors,
+                    new_shape,
+                    model_type,
+                    selected_class,
+                    traj_colors,
+                    track_history,
+                    polygons,
+                )
                 model_inference_cost = time.time() - inference_start_time
             except Empty:
                 cnt_pkt = (None, None)

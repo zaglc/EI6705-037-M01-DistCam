@@ -15,7 +15,12 @@ from src.running_models.detector.base.detector import (
 
 class ObjectCounter(YOLODetector):
     def __init__(
-        self, cam_id: int, classes_of_interest: List[str] = ["person"], log_file: str = "detection_log.txt", *args, **kwargs
+        self,
+        cam_id: int,
+        classes_of_interest: List[str] = ["person"],
+        log_file: str = "detection_log.txt",
+        *args,
+        **kwargs,
     ):
         """
         Extends YOLODetector to count objects of interest.
@@ -141,18 +146,27 @@ class ObjectCounter(YOLODetector):
 
         return alert
 
-    def online_predict(self, frame: np.ndarray, conf_thre = 0.4, iou_thre = 0.5, imgsz = 640) -> tuple:
+    def online_predict(self, frame: np.ndarray, conf_thre=0.4, iou_thre=0.5, imgsz=640) -> tuple:
         """
         Performs online object detection and updates the count in real-time for each frame.
         :param video_path: Path to the video file.
         :return: A frame with bounding boxes drawn around detected objects.
         """
 
-        detection_result = create_detection_result(self.frame_index, self._predict_one_frame(frame, conf_thre, iou_thre, imgsz))
+        detection_result = create_detection_result(
+            self.frame_index, self._predict_one_frame(frame, conf_thre, iou_thre, imgsz)
+        )
         alert = self.count_objects_in_frame(detection_result)  # Update cumulative count
         self.frame_index += 1
 
-        return (detection_result.cls, detection_result.conf, detection_result.boxes, self.cumulative_counts, detection_result.track_ids, alert)
+        return (
+            detection_result.cls,
+            detection_result.conf,
+            detection_result.boxes,
+            self.cumulative_counts,
+            detection_result.track_ids,
+            alert,
+        )
 
     def get_count_in_range(self, start_frame: int, end_frame: int) -> Dict[str, int]:
         """

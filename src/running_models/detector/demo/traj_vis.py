@@ -1,11 +1,19 @@
-import os, sys
+import os
+import sys
+
 sys.path.append(os.getcwd())
+import datetime
 from collections import defaultdict
+from typing import List
+
 import cv2
 import numpy as np
-from typing import List
-from src.running_models.detector.base.detector import DetectionResult, YOLODetector, create_detection_result
-import datetime
+
+from src.running_models.detector.base.detector import (
+    DetectionResult,
+    YOLODetector,
+    create_detection_result,
+)
 
 if __name__ == "__main__":
     # Initialize the YOLODetector
@@ -14,12 +22,12 @@ if __name__ == "__main__":
         weights="yolo11n.pt",
     )
     video_path = "data\src\Jackson-Hole-WY3@06-27_07-05-02.mp4"
-    output_video_path = 'traj_demo.mp4'
+    output_video_path = "traj_demo.mp4"
     cap = cv2.VideoCapture(video_path)
     fps = int(cap.get(cv2.CAP_PROP_FPS))  # 帧率
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))  # 帧宽
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))  # 帧高
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # MP4 编码器
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # MP4 编码器
     out = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
 
     track_history = defaultdict(list)
@@ -35,15 +43,17 @@ if __name__ == "__main__":
         result = detector._predict_one_frame(frame)
         # annotated_frame = result.plot()
         detection_result = create_detection_result(frame_count, result)
-        for track_id, name, conf, xywh in zip(detection_result.track_ids, detection_result.names, detection_result.conf, detection_result.boxes):
+        for track_id, name, conf, xywh in zip(
+            detection_result.track_ids, detection_result.names, detection_result.conf, detection_result.boxes
+        ):
             if name and conf > 0.5:
                 tl = round(0.002 * (frame.shape[0] + frame.shape[1]) / 2) + 1  # line/font thickness
                 c1 = tuple(map(int, (xywh[0] - xywh[2] / 2, xywh[1] - xywh[3] / 2)))
                 c2 = tuple(map(int, (xywh[0] + xywh[2] / 2, xywh[1] + xywh[3] / 2)))
                 color = [255, 0, 0]
-                
+
                 cv2.rectangle(frame, c1, c2, color, thickness=tl, lineType=cv2.LINE_AA)
-                
+
                 tf = max(tl - 1, 1)  # font thickness
                 t_size = cv2.getTextSize(name, 0, fontScale=tl / 3, thickness=tf)[0]
                 c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
@@ -57,12 +67,13 @@ if __name__ == "__main__":
                     track_history[track_id] = track_history[track_id][-300:]
                 track = track_history[track_id]
                 points = np.array(track, dtype=np.int32).reshape((-1, 1, 2))
-                cv2.polylines(frame, [points], isClosed=False, color=colors[track_id % len(colors)], thickness=2)  # Use a more visible color and thinner line
-
+                cv2.polylines(
+                    frame, [points], isClosed=False, color=colors[track_id % len(colors)], thickness=2
+                )  # Use a more visible color and thinner line
 
         cv2.imshow("YOLO Tracking Frame", frame)
         out.write(frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        if cv2.waitKey(1) & 0xFF == ord("q"):
             break
 
     cap.release()
