@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+sys.path.append(os.path.join("yolov3"))
 import time
 import datetime
 from multiprocessing import Process, Queue, current_process
@@ -17,9 +18,9 @@ import torch
 from PyQt6.QtWidgets import QApplication
 from qdarkstyle.light.palette import LightPalette
 
-from central_monitor.camera_top import Camera
-from Qt_ui.mainwin import custom_window
-from Qt_ui.utils import (
+from src.central_monitor.camera_top import Camera
+from src.Qt_ui.mainwin import custom_window
+from src.Qt_ui.utils import (
     FV_CAPTURE_IMAGE_Q,
     FV_FLIP_MODEL_ENABLE_Q,
     FV_FLIP_SIMU_STREAM_Q,
@@ -41,7 +42,7 @@ from Qt_ui.utils import (
     gpc_stream,
     safe_get,
 )
-from running_models.extern_model import (
+from src.running_models.extern_model import (
     YOLOV3_DETECT,
     YOLOV11_TRACK,
     initialize_model_engine,

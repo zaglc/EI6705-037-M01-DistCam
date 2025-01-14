@@ -1,6 +1,6 @@
-from .central_monitor.camera_top import Camera
-from .central_monitor.controller import Controller
-from .central_monitor.viewer import Viewer
+from src.central_monitor.camera_top import Camera
+from src.central_monitor.controller import Controller
+from src.central_monitor.viewer import Viewer
 
 __all__ = [
     "Controller",

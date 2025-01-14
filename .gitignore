@@ -2,8 +2,6 @@
 
 *__pycache__
 
-*yolov3*
-*weights*
 
 2023*
 2024*
@@ -17,5 +15,6 @@
 *Jackson-Hole-WY2*
 
 *.pptx
+*.pt
 
 *_temp.json
